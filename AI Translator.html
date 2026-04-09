@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>长篇文档翻译</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f3f4f6; color: #111827; }
+        .spinner {
+            border: 2px solid #4b5563;
+            border-top-color: #f3f4f6;
+            border-radius: 50%;
+            width: 1.25rem;
+            height: 1.25rem;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #logArea::-webkit-scrollbar { width: 8px; }
+        #logArea::-webkit-scrollbar-track { background: #1f2937; border-radius: 4px; }
+        #logArea::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        #logArea::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    </style>
+</head>
+<body class="font-sans min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-gray-900">长篇文档翻译</h1>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-5 bg-white p-6 rounded-xl shadow-md flex flex-col h-[720px]">
+                <h2 class="text-xl font-semibold mb-4 border-b border-gray-100 pb-2 text-gray-800 shrink-0">任务配置</h2>
+
+                <div class="mb-4 shrink-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">1. 文档上传 (TXT / MD / HTML)</label>
+                    <div class="flex items-center gap-3">
+                        <label for="fileInput" class="inline-flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md cursor-pointer transition-colors">
+                            选择文件
+                        </label>
+                        <span id="selectedFileName" class="text-sm text-gray-500 truncate">未选择文件</span>
+                    </div>
+                    <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,text/plain,text/markdown,text/html,application/xhtml+xml" class="hidden">
+                </div>
+
+                <div class="mb-4 shrink-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">2. 平台与凭证</label>
+                    <div class="flex space-x-2">
+                        <select id="providerSelect" class="w-1/3 px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-white">
+                            <option value="mistral">Mistral</option>
+                            <option value="xai">xAI</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="google">Google</option>
+                            <option value="anthropic">Anthropic</option>
+                            <option value="qwen">阿里云</option>
+                        </select>
+                        <input type="password" id="apiKey" placeholder="输入 API Key" class="w-2/3 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500">
+                    </div>
+                </div>
+
+                <div class="mb-4 shrink-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">3. 模型</label>
+                    <select id="modelSelect" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-gray-50"></select>
+                </div>
+
+                <div class="mb-4 shrink-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">4. 翻译风格</label>
+                    <select id="translationStyleSelect" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-white">
+                        <option value="literal">直译模式</option>
+                        <option value="faithful_natural" selected>忠实自然模式</option>
+                        <option value="literary_polish">文学润色模式</option>
+                    </select>
+                </div>
+
+                <div class="mb-6 shrink-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">5. 术语策略</label>
+                    <select id="termHandlingSelect" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-white">
+                        <option value="translate">翻译为中文</option>
+                        <option value="keep_english">保留原文</option>
+                    </select>
+                </div>
+
+                <button id="startBtn" class="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-md transition-colors shrink-0">
+                    开始翻译
+                </button>
+
+                <div id="downloadSection" class="mt-auto hidden flex-col space-y-3 border-t border-gray-100 pt-4">
+                    <h3 class="text-sm font-semibold text-gray-800 mb-1">任务结束</h3>
+                    <button id="dlTextBtn" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium py-2 px-4 rounded-md transition-colors shadow-sm">
+                        下载中文文档 (TXT)
+                    </button>
+                    <button id="dlDictBtn" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium py-2 px-4 rounded-md transition-colors shadow-sm">
+                        下载术语词典 (CSV)
+                    </button>
+                    <div class="pt-2">
+                        <label class="block text-xs font-medium text-gray-600 mb-1">换行格式</label>
+                        <select id="lineEndingSelect" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-white">
+                            <option value="mac" selected>Mac / Linux</option>
+                            <option value="windows">Windows</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 bg-gray-900 text-green-400 p-6 rounded-xl shadow-md flex flex-col h-[720px]">
+                <h2 class="text-xl font-semibold mb-3 text-white border-b border-gray-700 pb-2 flex items-center justify-between shrink-0">
+                    <span>实时监控面板</span>
+                    <div id="spinner" class="spinner hidden"></div>
+                </h2>
+                <div id="logArea" class="flex-1 overflow-y-auto font-mono text-sm space-y-1.5 whitespace-pre-wrap break-words pr-2">
+等待任务初始化...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const selectedFileName = document.getElementById('selectedFileName');
+        const providerSelect = document.getElementById('providerSelect');
+        const apiKeyInput = document.getElementById('apiKey');
+        const modelSelect = document.getElementById('modelSelect');
+        const translationStyleSelect = document.getElementById('translationStyleSelect');
+        const termHandlingSelect = document.getElementById('termHandlingSelect');
+        const lineEndingSelect = document.getElementById('lineEndingSelect');
+        const startBtn = document.getElementById('startBtn');
+        const logArea = document.getElementById('logArea');
+        const spinner = document.getElementById('spinner');
+        const downloadSection = document.getElementById('downloadSection');
+        const dlTextBtn = document.getElementById('dlTextBtn');
+        const dlDictBtn = document.getElementById('dlDictBtn');
+
+        const providerModels = {
+            mistral: [{ value: "mistral-small-latest", text: "mistral-small-latest" }],
+            xai: [{ value: "grok-4-1-fast-non-reasoning", text: "grok-4-1-fast-non-reasoning" }],
+            openai: [
+                { value: "gpt-5.4-nano", text: "gpt-5.4-nano" },
+                { value: "gpt-5-nano", text: "gpt-5-nano" }
+            ],
+            google: [{ value: "models/gemini-flash-lite-latest", text: "models/gemini-flash-lite-latest" }],
+            anthropic: [{ value: "claude-haiku-4-5", text: "claude-haiku-4-5" }],
+            qwen: [
+                { value: "qwen-long-latest", text: "qwen-long-latest" }
+            ]
+        };
+
+        function updateModels() {
+            const provider = providerSelect.value;
+            const models = providerModels[provider] || [];
+            modelSelect.innerHTML = '';
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '请选择模型';
+            placeholder.disabled = true;
+            placeholder.selected = true;
+            modelSelect.appendChild(placeholder);
+
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.value;
+                option.textContent = model.text;
+                modelSelect.appendChild(option);
+            });
+
+            if (models.length) {
+                modelSelect.value = models[0].value;
+            }
+        }
+
+        providerSelect.addEventListener('change', updateModels);
+        updateModels();
+
+        fileInput.addEventListener('change', () => {
+            if (!fileInput.files.length) {
+                selectedFileName.textContent = '未选择文件';
+                return;
+            }
+            const file = fileInput.files[0];
+            const format = formatFileLabel(detectFileFormat(file));
+            selectedFileName.textContent = `${file.name} · ${format}`;
+        });
+
+        let glossary = {};
+        let translatedText = "";
+        let translationMemory = [];
+        let protectedSegments = [];
+        let sourceFormat = "txt";
+        let isTranslating = false;
+        let abortController = null;
+        let translationStartTime = 0;
+        let sourceWordCount = 0;
+
+        function truncateText(text, maxLength) {
+            if (!text) return "";
+            const cleaned = text.replace(/\s+/g, ' ').trim();
+            if (cleaned.length <= maxLength) return cleaned;
+            return cleaned.slice(0, maxLength).trim() + '…';
+        }
+
+        function buildContextMemory() {
+            if (!translationMemory.length) return "暂无历史上下文。";
+            const recentItems = translationMemory.slice(-3);
+            const startIndex = translationMemory.length - recentItems.length + 1;
+            return recentItems
+                .map((item, index) => `前文片段 ${startIndex + index}：${item}`)
+                .join('\n');
+        }
+
+        function updateTranslationMemory(chunkTranslation) {
+            const summary = truncateText(chunkTranslation, 900);
+            if (summary) {
+                translationMemory.push(summary);
+                if (translationMemory.length > 8) {
+                    translationMemory = translationMemory.slice(-8);
+                }
+            }
+        }
+
+        function getFileExtension(name) {
+            const match = String(name || "").toLowerCase().match(/\.([^.]+)$/);
+            return match ? match[1] : "";
+        }
+
+        function detectFileFormat(file) {
+            const ext = getFileExtension(file?.name);
+            const mime = (file?.type || "").toLowerCase();
+
+            if (ext === "txt" || mime === "text/plain") return "txt";
+            if (["md", "markdown", "mkd", "mdown"].includes(ext) || mime.includes("markdown")) return "md";
+            if (["html", "htm", "xhtml"].includes(ext) || mime.includes("html") || mime === "application/xhtml+xml") return "html";
+            return ext || "";
+        }
+
+        function formatFileLabel(format) {
+            if (format === "md") return "Markdown";
+            if (format === "html") return "HTML";
+            if (format === "txt") return "TXT";
+            return format ? format.toUpperCase() : "未知格式";
+        }
+
+        function normalizePlainText(text) {
+            return String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        }
+
+        function createProtector() {
+            const segments = [];
+            return {
+                segments,
+                protect(value) {
+                    const text = String(value ?? "");
+                    const token = `__ALMA_PROTECTED_${segments.length}__`;
+                    segments.push({ token, value: text });
+                    return token;
+                }
+            };
+        }
+
+        function restoreProtectedSegments(text, segments) {
+            let output = String(text ?? "");
+            for (const segment of segments || []) {
+                output = output.split(segment.token).join(segment.value);
+            }
+            return output;
+        }
+
+        function markdownToText(markdown) {
+            const protector = createProtector();
+            const lines = normalizePlainText(markdown).split("\n");
+            const output = [];
+            let inFence = false;
+            let fenceMarker = "";
+            let fenceBuffer = [];
+
+            const flushFence = () => {
+                if (!fenceBuffer.length) return;
+                const raw = fenceBuffer.join("\n");
+                output.push(protector.protect(raw));
+                fenceBuffer = [];
+            };
+
+            for (const line of lines) {
+                const fenceMatch = line.match(/^\s*(```|~~~)/);
+                if (fenceMatch) {
+                    if (inFence) {
+                        fenceBuffer.push(line);
+                        flushFence();
+                        inFence = false;
+                        fenceMarker = "";
+                    } else {
+                        inFence = true;
+                        fenceMarker = fenceMatch[1];
+                        fenceBuffer = [line];
+                    }
+                    continue;
+                }
+
+                if (inFence) {
+                    fenceBuffer.push(line);
+                    continue;
+                }
+
+                let out = line
+                    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, "$1")
+                    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)")
+                    .replace(/^#{1,6}\s+/, "")
+                    .replace(/^>\s?/, "> ")
+                    .replace(/^(\s*[-*+])\s+/, "$1 ")
+                    .replace(/^(\s*\d+\.)\s+/, "$1 ")
+                    .replace(/\*\*(.*?)\*\*/g, "$1")
+                    .replace(/__(.*?)__/g, "$1")
+                    .replace(/\*(.*?)\*/g, "$1")
+                    .replace(/_(.*?)_/g, "$1")
+                    .replace(/~~(.*?)~~/g, "$1");
+
+                output.push(out);
+            }
+
+            if (inFence && fenceBuffer.length) {
+                flushFence();
+            }
+
+            return {
+                text: output.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+                format: "md",
+                segments: protector.segments
+            };
+        }
+
+        function htmlToText(html) {
+            const protector = createProtector();
+            const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+            const body = doc.body || doc.documentElement;
+            const skipTags = new Set(["script", "style", "noscript"]);
+            const blockTags = new Set([
+                "address", "article", "aside", "blockquote", "div", "dl", "dt", "dd", "fieldset",
+                "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+                "header", "hr", "li", "main", "nav", "ol", "p", "pre", "section", "table",
+                "tbody", "thead", "tfoot", "tr", "td", "th", "ul"
+            ]);
+
+            const walk = (node) => {
+                if (!node) return "";
+                if (node.nodeType === Node.TEXT_NODE) {
+                    return node.nodeValue || "";
+                }
+                if (node.nodeType !== Node.ELEMENT_NODE) return "";
+
+                const tag = node.tagName.toLowerCase();
+                if (skipTags.has(tag)) return "";
+                if (tag === "br" || tag === "hr") return "\n";
+                if (tag === "img") return node.getAttribute("alt") || "";
+                if (tag === "pre") return `\n${protector.protect(node.textContent || "")}\n`;
+                if (tag === "code" && node.parentElement && node.parentElement.tagName.toLowerCase() !== "pre") {
+                    return protector.protect(node.textContent || "");
+                }
+
+                let content = "";
+                for (const child of Array.from(node.childNodes)) {
+                    content += walk(child);
+                }
+
+                if (tag === "li") {
+                    content = `- ${content.trim()}`;
+                }
+
+                if (tag === "td" || tag === "th") {
+                    content = content.replace(/\n+/g, " ").trim() + "\t";
+                }
+
+                if (blockTags.has(tag)) {
+                    return `\n${content.trim()}\n`;
+                }
+
+                return content;
+            };
+
+            const text = walk(body)
+                .replace(/[\t ]+\n/g, "\n")
+                .replace(/\n{3,}/g, "\n\n")
+                .trim();
+
+            return {
+                text,
+                format: "html",
+                segments: protector.segments
+            };
+        }
+
+        async function extractSourceText(file) {
+            const format = detectFileFormat(file);
+            const raw = await file.text();
+
+            if (format === "txt" || format === "") {
+                return { text: normalizePlainText(raw).trim(), format: format || "txt", segments: [] };
+            }
+            if (format === "md") {
+                return markdownToText(raw);
+            }
+            if (format === "html") {
+                return htmlToText(raw);
+            }
+
+            throw new Error("仅支持 TXT、Markdown 和 HTML 文件");
+        }
+
+        const liveState = {
+            phase: '等待任务初始化',
+            detail: '等待任务初始化',
+            chunk: null,
+            totalChunks: 0,
+            retryCount: 0,
+            error: null
+        };
+
+        function setLiveState(phase, detail = '', extra = {}) {
+            Object.assign(liveState, { phase, detail, ...extra });
+            renderLiveState();
+        }
+
+        function renderLiveState() {
+            const topLine = `${liveState.phase}${liveState.detail ? ` · ${liveState.detail}` : ''}`;
+            const chunkLine = liveState.totalChunks > 0 ? `区块: ${liveState.chunk ?? '-'} / ${liveState.totalChunks}` : '区块: -';
+            const retryLine = `重试: ${liveState.retryCount || 0}`;
+            const errorLine = liveState.error ? `错误: ${liveState.error}` : '错误: -';
+            logArea.dataset.status = topLine;
+            logArea.dataset.chunk = chunkLine;
+            logArea.dataset.retry = retryLine;
+            logArea.dataset.error = errorLine;
+        }
+
+        function log(msg, type = "info") {
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+
+            if (type === "error") div.className = "text-red-400 font-bold";
+            else if (type === "warn") div.className = "text-orange-400";
+            else if (type === "success") div.className = "text-green-300 font-bold";
+            else if (type === "term") div.className = "text-yellow-300";
+            else if (type === "stats") div.className = "text-cyan-300 font-bold mt-2";
+            else div.className = "text-gray-300";
+
+            div.textContent = `[${time}] ${msg}`;
+            logArea.appendChild(div);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+
+        function stripXmlWrapper(rawContent) {
+            return String(rawContent || '').replace(/<translation>[\s\S]*?<\/translation>/i, '').replace(/<glossary>[\s\S]*?<\/glossary>/i, '').trim();
+        }
+
+        function chunkText(text, maxChars = 5000) {
+            const paragraphs = text.split(/\n\s*\n/);
+            const chunks = [];
+            let currentChunk = "";
+
+            for (const p of paragraphs) {
+                if (currentChunk.length + p.length < maxChars) {
+                    currentChunk += p + "\n\n";
+                } else {
+                    if (currentChunk.trim()) chunks.push(currentChunk.trim());
+                    currentChunk = p + "\n\n";
+                }
+            }
+            if (currentChunk.trim()) chunks.push(currentChunk.trim());
+            return chunks;
+        }
+
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+        function countLatinWords(text) {
+            const matches = text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g);
+            return matches ? matches.length : 0;
+        }
+
+        function countChineseChars(text) {
+            const matches = text.match(/[\u4e00-\u9fff]/g);
+            return matches ? matches.length : 0;
+        }
+
+        function formatDuration(ms) {
+            const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
+        }
+
+        async function callAI(chunk, apiKey, provider, model, translationStyle, termHandling, signal, contextMemory) {
+            let glossaryStr = Object.entries(glossary).map(([k, v]) => `${k}: ${v}`).join('\n');
+            if (!glossaryStr) glossaryStr = "暂无";
+
+            let styleRule = "";
+            if (translationStyle === 'literal') {
+                styleRule = "采用直译模式：尽量保持原文句式与信息结构，优先忠实对应原文表达，不主动扩写、不润色。";
+            } else if (translationStyle === 'literary_polish') {
+                styleRule = "采用文学润色模式：在不改变原意的前提下，优先使用更自然、更有文采、更具阅读性的中文表达，可适度调整语序以提升文笔。";
+            } else {
+                styleRule = "采用忠实自然模式：在忠实原意的基础上，使用自然流畅的中文表达，兼顾准确性与可读性。";
+            }
+
+            let termRule = "";
+            let extractRule = "";
+            let immersiveRule = "";
+            if (termHandling === 'keep_english') {
+                termRule = "遇到以上词汇，在生成的译文中必须严格保留原文，绝对不可翻译为中文。";
+                extractRule = "遇到词表中没有的新角色人名、新地名或新特殊物品名时，在生成的译文中请直接保留其英文原文。但为了建立词典，请你在提取时为它们构思一个准确的中文译名，并放入 <glossary> 标签中。";
+                immersiveRule = "直接输出英文名，不要在正文中补充任何中文解释或括号。";
+            } else {
+                termRule = "遇到以上词汇，在生成的译文中必须严格使用对应的纯中文翻译，绝对不可更改。";
+                extractRule = "遇到词表中没有的新角色人名、新地名或新特殊物品名时，请给出一个准确的中文翻译，并在生成的译文中直接使用该中文名。同时将其提取在 <glossary> 标签中。";
+                immersiveRule = "绝对禁止在译文中出现“中文译名（英文原名）”的格式。所有专有名词只需要纯粹的中文译名。凡是带有原名括号的输出均为不合格。";
+            }
+
+            const contextMemoryText = contextMemory || "暂无历史上下文。";
+
+            const systemPrompt = `你是一位专业的长篇文档翻译家。请将以下文本翻译成地道、流畅的中文。
+【翻译风格】
+${styleRule}
+
+【最近译文上下文】
+${contextMemoryText}
+
+【强制约束：当前已知专有名词表】
+${glossaryStr}
+${termRule}
+
+【词典提取任务】
+${extractRule}
+
+【排版要求】
+${immersiveRule}
+保证译文流畅、完整翻译，保持原著基调。对于所有的内容，请毫不避讳地完整翻译。
+
+请严格按照以下XML格式输出回复：
+<translation>
+[在这里写上你翻译好的中文段落]
+</translation>
+<glossary>
+[英文名1] = [中文译名1]
+</glossary>
+
+如果没有发现新的专有名词，<glossary>标签内部留空即可。`;
+
+            let response;
+            let data;
+            let content = "";
+            let usage = { prompt_tokens: 0, completion_tokens: 0 };
+
+            const isOpenAIgpt5 = provider === 'openai' && /^gpt-5(\.|-)/i.test(model);
+
+            if (provider === 'mistral' || provider === 'xai' || provider === 'openai') {
+                const endpoints = {
+                    mistral: "https://api.mistral.ai/v1/chat/completions",
+                    xai: "https://api.x.ai/v1/chat/completions",
+                    openai: "https://api.openai.com/v1/chat/completions"
+                };
+                const payload = {
+                    model: model,
+                    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: chunk }]
+                };
+                if (!isOpenAIgpt5) {
+                    payload.temperature = 0.3;
+                }
+                response = await fetch(endpoints[provider], {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+                    body: JSON.stringify(payload),
+                    signal: signal
+                });
+                if (!response.ok) throw new Error(`API Error ${response.status}: ${await response.text()}`);
+                data = await response.json();
+                content = data.choices?.[0]?.message?.content || "";
+                usage = { prompt_tokens: data.usage?.prompt_tokens, completion_tokens: data.usage?.completion_tokens };
+            } else if (provider === 'google') {
+                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: systemPrompt }] },
+                        contents: [{ parts: [{ text: chunk }] }],
+                        generationConfig: { temperature: 0.3 }
+                    }),
+                    signal: signal
+                });
+                if (!response.ok) throw new Error(`API Error ${response.status}: ${await response.text()}`);
+                data = await response.json();
+                content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                usage = { prompt_tokens: data.usageMetadata?.promptTokenCount, completion_tokens: data.usageMetadata?.candidatesTokenCount };
+            } else if (provider === 'anthropic') {
+                response = await fetch("https://api.anthropic.com/v1/messages", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": apiKey,
+                        "anthropic-version": "2023-06-01",
+                        "anthropic-dangerous-direct-browser-access": "true"
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        system: systemPrompt,
+                        messages: [{ role: "user", content: chunk }],
+                        temperature: 0.3,
+                        max_tokens: 8192
+                    }),
+                    signal: signal
+                });
+                if (!response.ok) throw new Error(`API Error ${response.status}: ${await response.text()}`);
+                data = await response.json();
+                content = data.content?.[0]?.text || "";
+                usage = { prompt_tokens: data.usage?.input_tokens, completion_tokens: data.usage?.output_tokens };
+            } else if (provider === 'qwen') {
+                response = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: "user", content: `${systemPrompt}\n\n${chunk}` }],
+                        temperature: 0.3
+                    }),
+                    signal: signal
+                });
+                if (!response.ok) throw new Error(`API Error ${response.status}: ${await response.text()}`);
+                data = await response.json();
+                content = data.choices?.[0]?.message?.content || "";
+                usage = { prompt_tokens: data.usage?.prompt_tokens, completion_tokens: data.usage?.completion_tokens };
+            }
+
+            return { content, usage };
+        }
+
+        function parseResponse(rawContent) {
+            let translation = "";
+            let newTerms = [];
+
+            const transMatch = rawContent.match(/<translation>([\s\S]*?)<\/translation>/i);
+            const glossMatch = rawContent.match(/<glossary>([\s\S]*?)<\/glossary>/i);
+
+            if (transMatch && transMatch[1]) {
+                translation = transMatch[1].trim();
+            } else {
+                translation = rawContent.trim();
+            }
+
+            if (glossMatch && glossMatch[1]) {
+                const lines = glossMatch[1].trim().split('\n');
+                for (let line of lines) {
+                    if (line.includes('=')) {
+                        let [eng, chi] = line.split('=');
+                        eng = eng.replace(/\[|\]/g, '').trim();
+                        chi = chi.replace(/\[|\]/g, '').trim();
+                        if (eng && chi) newTerms.push({ eng, chi });
+                    }
+                }
+            }
+
+            return { translation, newTerms };
+        }
+
+        function downloadFile(content, filename, type) {
+            const blob = new Blob([content], { type: type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function glossaryToCSV(data, lineEnding = '\n') {
+            const escapeCSV = (value) => {
+                const text = String(value ?? "");
+                return `"${text.replaceAll('"', '""')}"`;
+            };
+            const lines = ["英文名,中文译名"];
+            for (const [eng, chi] of Object.entries(data)) {
+                lines.push(`${escapeCSV(eng)},${escapeCSV(chi)}`);
+            }
+            return "\ufeff" + lines.join(lineEnding);
+        }
+
+        function normalizeLineEndings(text, mode) {
+            return mode === 'windows' ? text.replace(/\r?\n/g, '\r\n') : text.replace(/\r\n/g, '\n');
+        }
+
+        startBtn.addEventListener('click', async () => {
+            if (isTranslating) {
+                if (confirm("确定要终止当前的翻译任务吗？已翻译的部分将保留并可下载。")) {
+                    if (abortController) abortController.abort();
+                    startBtn.textContent = "正在终止...";
+                    startBtn.disabled = true;
+                }
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const provider = providerSelect.value;
+            const apiKey = apiKeyInput.value.trim();
+            const model = modelSelect.value;
+            const translationStyle = translationStyleSelect.value;
+            const termHandling = termHandlingSelect.value;
+
+            if (!file) {
+                alert("请选择需翻译的文档");
+                return;
+            }
+            if (!apiKey) {
+                alert("请提供对应的 API Key");
+                return;
+            }
+
+            isTranslating = true;
+            abortController = new AbortController();
+            startBtn.textContent = "终止翻译";
+            startBtn.classList.replace('bg-gray-800', 'bg-red-700');
+            startBtn.classList.replace('hover:bg-gray-700', 'hover:bg-red-800');
+
+            spinner.classList.remove('hidden');
+            downloadSection.classList.add('hidden');
+            logArea.innerHTML = "";
+
+            glossary = {};
+            translatedText = "";
+            translationMemory = [];
+            protectedSegments = [];
+            sourceFormat = "txt";
+            let totalPromptTokens = 0;
+            let totalCompletionTokens = 0;
+            let failedChunksCount = 0;
+            let userAborted = false;
+
+            try {
+                const extracted = await extractSourceText(file);
+                const text = extracted.text;
+                sourceFormat = extracted.format;
+                protectedSegments = extracted.segments || [];
+                translationStartTime = Date.now();
+                sourceWordCount = countLatinWords(text);
+                log(`读取文件: ${file.name} | 格式: ${formatFileLabel(sourceFormat)} | 大小: ${(text.length/1024).toFixed(2)} KB`);
+                log(`请求通道: ${provider.toUpperCase()} | 模型: ${model}`);
+                log(`术语策略: ${termHandling === 'keep_english' ? '保留原文' : '译为中文'}`);
+
+                const chunks = chunkText(text, 5000);
+                setLiveState('提取完成', `已分割为 ${chunks.length} 个区块`, { totalChunks: chunks.length, chunk: 0, retryCount: 0, error: null });
+                log(`文档已分割为 ${chunks.length} 个区块，开始处理任务...`, "success");
+
+                for (let i = 0; i < chunks.length; i++) {
+                    if (abortController.signal.aborted) {
+                        log(`任务被手动终止。`, "warn");
+                        userAborted = true;
+                        break;
+                    }
+
+                    setLiveState('翻译中', `翻译区块 ${i + 1}/${chunks.length}`, { chunk: i + 1, totalChunks: chunks.length, retryCount: 0, error: null });
+                    log(`处理区块 [${i + 1}/${chunks.length}] ...`);
+
+                    let success = false;
+                    let attempt = 0;
+                    const maxAttempts = 5;
+
+                    while (!success && attempt < maxAttempts) {
+                        attempt++;
+                        try {
+                            const contextMemory = buildContextMemory();
+                            const apiResult = await callAI(chunks[i], apiKey, provider, model, translationStyle, termHandling, abortController.signal, contextMemory);
+                            const parsed = parseResponse(apiResult.content);
+
+                            if (apiResult.usage) {
+                                totalPromptTokens += apiResult.usage.prompt_tokens || 0;
+                                totalCompletionTokens += apiResult.usage.completion_tokens || 0;
+                            }
+
+                            const restoredTranslation = restoreProtectedSegments(parsed.translation, protectedSegments);
+                            setLiveState('翻译中', `区块 ${i + 1}/${chunks.length} 已完成`, { chunk: i + 1, totalChunks: chunks.length, retryCount: attempt - 1, error: null });
+
+                            translatedText += restoredTranslation + "\n\n";
+                            updateTranslationMemory(restoredTranslation);
+
+                            for (const term of parsed.newTerms) {
+                                if (!glossary[term.eng]) {
+                                    glossary[term.eng] = term.chi;
+                                    log(`提取术语: ${term.eng} -> ${term.chi}`, "term");
+                                }
+                            }
+
+                            log(`区块 [${i + 1}] 完成` + (attempt > 1 ? ` (重试 ${attempt-1} 次)` : ''), "success");
+                            success = true;
+                        } catch (err) {
+                            if (err.name === 'AbortError') throw err;
+
+                            setLiveState('重试中', `区块 ${i + 1}/${chunks.length} 第 ${attempt}/${maxAttempts} 次`, { chunk: i + 1, totalChunks: chunks.length, retryCount: attempt, error: err.message });
+                            log(`区块 [${i + 1}] 异常 (尝试 ${attempt}/${maxAttempts}): ${err.message}`, "warn");
+                            if (attempt < maxAttempts) {
+                                const waitTime = Math.pow(2, attempt);
+                                log(`系统等待 ${waitTime} 秒后重试...`);
+                                await sleep(waitTime * 1000);
+                            }
+                        }
+                    }
+
+                    if (!success && !abortController.signal.aborted) {
+                        log(`区块 [${i + 1}] 经 ${maxAttempts} 次重试依旧失败，已降级输出原文。`, "error");
+                        setLiveState('错误', `区块 ${i + 1}/${chunks.length} 翻译失败，已降级输出原文`, { chunk: i + 1, totalChunks: chunks.length, error: '多次重试后仍失败' });
+                        translatedText += `\n\n[系统提示：区块 ${i + 1} 翻译异常，输出原文]\n${restoreProtectedSegments(chunks[i], protectedSegments)}\n\n`;
+                        failedChunksCount++;
+                    }
+
+                    if (!abortController.signal.aborted) {
+                        await sleep(1000);
+                    }
+                }
+
+                if (!userAborted) {
+                    setLiveState('下载准备', '全部区块处理完毕', { chunk: chunks.length, totalChunks: chunks.length });
+                    log(`全部区块处理完毕`, "success");
+                }
+                if (failedChunksCount > 0) {
+                    log(`警报: 存在 ${failedChunksCount} 个区块处理失败并输出原文。`, "warn");
+                }
+                setLiveState('下载准备', '检索结束，等待下载', { error: null });
+                log(`检索结束，共收录 ${Object.keys(glossary).length} 项专有术语。`);
+
+                const totalTokens = totalPromptTokens + totalCompletionTokens;
+                log(`Token 消耗结算:`, "stats");
+                log(`输入 (Prompt): ${totalPromptTokens.toLocaleString()}`, "stats");
+                log(`输出 (Completion): ${totalCompletionTokens.toLocaleString()}`, "stats");
+                log(`总计: ${totalTokens.toLocaleString()}`, "stats");
+
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    setLiveState('错误', '任务已中断', { error: '用户终止' });
+                    log(`任务流已中断。已完成的部分可正常下载。`, "warn");
+                } else {
+                    setLiveState('错误', '任务异常', { error: err.message });
+                    log(`任务致命异常: ${err.message}`, "error");
+                }
+            } finally {
+                isTranslating = false;
+                startBtn.disabled = false;
+                startBtn.textContent = "开始翻译";
+                startBtn.classList.replace('bg-red-700', 'bg-gray-800');
+                startBtn.classList.replace('hover:bg-red-800', 'hover:bg-gray-700');
+                spinner.classList.add('hidden');
+                setLiveState('完成', '任务结束', { error: null });
+
+                if (translationStartTime > 0) {
+                    const elapsed = Date.now() - translationStartTime;
+                    const chineseCharCount = countChineseChars(translatedText);
+                    log(`文档统计:`, "stats");
+                    log(`英文总单词数: ${sourceWordCount.toLocaleString()}`, "stats");
+                    log(`中文总字数: ${chineseCharCount.toLocaleString()}`, "stats");
+                    log(`翻译耗时: ${formatDuration(elapsed)}`, "stats");
+                }
+
+                downloadSection.classList.remove('hidden');
+                downloadSection.classList.add('flex');
+            }
+        });
+
+        function getBaseFileName(name) {
+            return name.replace(/\.[^.]+$/, '');
+        }
+
+        function safeFileName(name) {
+            return name.replace(/[\\/:*?"<>|]/g, '_');
+        }
+
+        function getStyleShortName(styleValue) {
+            if (styleValue === 'literal') return '直译';
+            if (styleValue === 'literary_polish') return '润色';
+            return '自然';
+        }
+
+        function buildOutputName(originalName, modelName, styleValue, ext) {
+            const baseName = originalName ? getBaseFileName(originalName) : '文档';
+            const safeModel = safeFileName(modelName || '模型');
+            const styleName = getStyleShortName(styleValue);
+            return safeFileName(`${baseName} 中文译文 ${safeModel} ${styleName}.${ext}`);
+        }
+
+        function buildGlossaryName(originalName, modelName, styleValue) {
+            const baseName = originalName ? getBaseFileName(originalName) : '文档';
+            const safeModel = safeFileName(modelName || '模型');
+            const styleName = getStyleShortName(styleValue);
+            return safeFileName(`${baseName} 术语表 ${safeModel} ${styleName}.csv`);
+        }
+
+        dlTextBtn.addEventListener('click', () => {
+            const lineEndingMode = lineEndingSelect.value;
+            const txtContent = normalizeLineEndings(translatedText, lineEndingMode);
+            const originalName = fileInput.files.length ? fileInput.files[0].name : '文档';
+            const outName = buildOutputName(originalName, modelSelect.value, translationStyleSelect.value, 'txt');
+            downloadFile(txtContent, outName, "text/plain;charset=utf-8");
+        });
+
+        dlDictBtn.addEventListener('click', () => {
+            const lineEndingMode = lineEndingSelect.value;
+            const csvLineEnding = lineEndingMode === 'windows' ? '\r\n' : '\n';
+            const originalName = fileInput.files.length ? fileInput.files[0].name : '文档';
+            const outName = buildGlossaryName(originalName, modelSelect.value, translationStyleSelect.value);
+            downloadFile(glossaryToCSV(glossary, csvLineEnding), outName, "text/csv;charset=utf-8");
+        });
+    </script>
+</body>
+</html>
