@@ -6,49 +6,231 @@
     <title>长篇文档翻译</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #f3f4f6; color: #111827; }
+        :root {
+            --mac-bg: #ececec;
+            --mac-window-bg: #fff;
+            --mac-toolbar: rgba(246, 246, 246, 0.85);
+            --mac-border: rgba(0, 0, 0, 0.1);
+            --mac-text: #1d1d1f;
+            --mac-text-muted: #86868b;
+            --mac-accent: #007aff;
+            --mac-divider: rgba(0, 0, 0, 0.06);
+            --mac-input-bg: #fff;
+            --mac-input-border: rgba(0, 0, 0, 0.15);
+            --mac-input-focus: rgba(0, 122, 255, 0.5);
+            --mac-log-bg: #1e1e1e;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+            background-color: var(--mac-bg); 
+            color: var(--mac-text); 
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .mac-window {
+            width: 100%;
+            max-width: 1000px;
+            height: 720px;
+            background: var(--mac-window-bg);
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15), 0 0 0 0.5px var(--mac-border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .mac-toolbar {
+            height: 52px;
+            background: var(--mac-toolbar);
+            backdrop-filter: blur(30px) saturate(200%);
+            -webkit-backdrop-filter: blur(30px) saturate(200%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 0.5px solid var(--mac-border);
+            position: relative;
+            z-index: 10;
+        }
+        .mac-toolbar h1 {
+            font-size: 13px;
+            font-weight: 600;
+            margin: 0;
+            color: var(--mac-text);
+            letter-spacing: -0.1px;
+        }
+        .mac-content {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+        .mac-sidebar {
+            width: 320px;
+            background: rgba(246, 246, 246, 0.4);
+            border-right: 0.5px solid var(--mac-border);
+            padding: 20px;
+            overflow-y: auto;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        .mac-main {
+            flex: 1;
+            background: var(--mac-log-bg);
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .form-group {
+            margin-bottom: 16px;
+            flex-shrink: 0;
+        }
+        .form-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--mac-text-muted);
+            margin-bottom: 6px;
+        }
+        .mac-input, .mac-select {
+            width: 100%;
+            padding: 5px 8px;
+            font-size: 13px;
+            border: 0.5px solid var(--mac-input-border);
+            border-radius: 6px;
+            background: var(--mac-input-bg);
+            color: var(--mac-text);
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.1s, box-shadow 0.1s;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.02);
+            font-family: inherit;
+        }
+        .mac-input:focus, .mac-select:focus {
+            border-color: var(--mac-accent);
+            box-shadow: 0 0 0 3px var(--mac-input-focus);
+        }
+        .flex-row { display: flex; gap: 8px; }
+        .flex-row > * { flex: 1; min-width: 0; }
+        
+        .mac-btn {
+            width: 100%;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            border: 0.5px solid var(--mac-border);
+            background: #fff;
+            color: var(--mac-text);
+            box-shadow: 0 1px 1px rgba(0,0,0,0.04);
+            font-family: inherit;
+            outline: none;
+            transition: background 0.1s;
+            box-sizing: border-box;
+        }
+        .mac-btn:active { background: #f0f0f0; }
+        
+        .mac-btn-primary {
+            background: var(--mac-accent);
+            color: #fff;
+            border: 0.5px solid rgba(0,0,0,0.1);
+            border-top-color: rgba(255,255,255,0.2);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .mac-btn-primary:active { background: #006ee6; }
+        .mac-btn-primary.is-translating { background: #d93939; border-color: rgba(0,0,0,0.2); }
+        .mac-btn-primary.is-translating:active { background: #c23333; }
+        
+        .file-upload-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-upload-wrapper .mac-btn { flex-shrink: 0; width: auto; }
+        #selectedFileName { font-size: 12px; color: var(--mac-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        #downloadSection {
+            margin-top: auto;
+            border-top: 0.5px solid var(--mac-border);
+            padding-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .hidden { display: none !important; }
+
+        .log-header {
+            padding: 8px 16px;
+            background: rgba(0,0,0,0.2);
+            border-bottom: 0.5px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .log-header span {
+            font-size: 11px;
+            font-weight: 600;
+            color: #a1a1a6;
+        }
+        #logArea {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            font-family: "SF Mono", Monaco, Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+        #logArea::-webkit-scrollbar { width: 12px; }
+        #logArea::-webkit-scrollbar-track { background: transparent; }
+        #logArea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 8px; border: 3px solid var(--mac-log-bg); }
+        
         .spinner {
-            border: 2px solid #4b5563;
-            border-top-color: #f3f4f6;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #fff;
             border-radius: 50%;
-            width: 1.25rem;
-            height: 1.25rem;
+            width: 14px;
+            height: 14px;
             animation: spin 1s linear infinite;
-            display: inline-block;
-            vertical-align: middle;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #logArea::-webkit-scrollbar { width: 8px; }
-        #logArea::-webkit-scrollbar-track { background: #1f2937; border-radius: 4px; }
-        #logArea::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
-        #logArea::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        .log-info { color: #a1a1a6; }
+        .log-success { color: #34c759; font-weight: 600; }
+        .log-warn { color: #ff9f0a; }
+        .log-error { color: #ff453a; font-weight: 600; }
+        .log-term { color: #0a84ff; }
+        .log-stats { color: #bf5af2; font-weight: 600; }
+        div:not(.log-stats) + .log-stats { margin-top: 18px; }
     </style>
 </head>
-<body class="font-sans min-h-screen p-8">
-    <div class="max-w-6xl mx-auto">
-        <header class="mb-8 text-center">
-            <h1 class="text-4xl font-bold text-gray-900">长篇文档翻译</h1>
-        </header>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div class="lg:col-span-5 bg-white p-6 rounded-xl shadow-md flex flex-col h-[720px]">
-                <h2 class="text-xl font-semibold mb-4 border-b border-gray-100 pb-2 text-gray-800 shrink-0">任务配置</h2>
-
-                <div class="mb-4 shrink-0">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">1. 文档上传 (TXT / MD / HTML)</label>
-                    <div class="flex items-center gap-3">
-                        <label for="fileInput" class="inline-flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md cursor-pointer transition-colors">
-                            选择文件
-                        </label>
-                        <span id="selectedFileName" class="text-sm text-gray-500 truncate">未选择文件</span>
+<body>
+    <div class="mac-window">
+        <div class="mac-toolbar">
+            <h1>长篇文档翻译</h1>
+        </div>
+        <div class="mac-content">
+            <div class="mac-sidebar">
+                <div class="form-group">
+                    <span class="form-label">上传文档 (TXT/MD/HTML)</span>
+                    <div class="file-upload-wrapper">
+                        <label for="fileInput" class="mac-btn">选取文件...</label>
+                        <span id="selectedFileName">未选择文件</span>
+                        <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,text/plain,text/markdown,text/html,application/xhtml+xml" class="hidden">
                     </div>
-                    <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,text/plain,text/markdown,text/html,application/xhtml+xml" class="hidden">
                 </div>
 
-                <div class="mb-4 shrink-0">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">2. 平台与凭证</label>
-                    <div class="flex space-x-2">
-                        <select id="providerSelect" class="w-1/3 px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-white">
+                <div class="form-group">
+                    <span class="form-label">供应商与凭证</span>
+                    <div class="flex-row">
+                        <select id="providerSelect" class="mac-select" style="flex: 0.5;">
                             <option value="mistral">Mistral</option>
                             <option value="xai">xAI</option>
                             <option value="openai">OpenAI</option>
@@ -56,47 +238,52 @@
                             <option value="anthropic">Anthropic</option>
                             <option value="qwen">阿里云</option>
                         </select>
-                        <input type="password" id="apiKey" placeholder="输入 API Key" class="w-2/3 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500">
+                        <input type="password" id="apiKey" placeholder="API Key" class="mac-input">
                     </div>
                 </div>
 
-                <div class="mb-4 shrink-0">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">3. 模型</label>
-                    <select id="modelSelect" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-gray-50"></select>
+                <div class="form-group">
+                    <span class="form-label">模型选择</span>
+                    <select id="modelSelect" class="mac-select"></select>
                 </div>
 
-                <div class="mb-4 shrink-0">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">4. 翻译风格</label>
-                    <select id="translationStyleSelect" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-white">
+                <div class="form-group">
+                    <span class="form-label">译文语言</span>
+                    <select id="targetLangSelect" class="mac-select">
+                        <option value="zh" selected>中文</option>
+                        <option value="en">English</option>
+                        <option value="de">Deutsch</option>
+                        <option value="es">Español</option>
+                        <option value="ja">日本語</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <span class="form-label">翻译风格</span>
+                    <select id="translationStyleSelect" class="mac-select">
                         <option value="literal">直译模式</option>
                         <option value="faithful_natural" selected>忠实自然模式</option>
                         <option value="literary_polish">文学润色模式</option>
+                        <option value="academic">学术论文模式</option>
                     </select>
                 </div>
 
-                <div class="mb-6 shrink-0">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">5. 术语策略</label>
-                    <select id="termHandlingSelect" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-white">
-                        <option value="translate">翻译为中文</option>
-                        <option value="keep_english">保留原文</option>
+                <div class="form-group">
+                    <span class="form-label">术语策略</span>
+                    <select id="termHandlingSelect" class="mac-select">
+                        <option value="translate">翻译为目标语言</option>
+                        <option value="keep_source">保留原文</option>
                     </select>
                 </div>
 
-                <button id="startBtn" class="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-md transition-colors shrink-0">
-                    开始翻译
-                </button>
+                <button id="startBtn" class="mac-btn mac-btn-primary">开始翻译</button>
 
-                <div id="downloadSection" class="mt-auto hidden flex-col space-y-3 border-t border-gray-100 pt-4">
-                    <h3 class="text-sm font-semibold text-gray-800 mb-1">任务结束</h3>
-                    <button id="dlTextBtn" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium py-2 px-4 rounded-md transition-colors shadow-sm">
-                        下载中文文档 (TXT)
-                    </button>
-                    <button id="dlDictBtn" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium py-2 px-4 rounded-md transition-colors shadow-sm">
-                        下载术语词典 (CSV)
-                    </button>
-                    <div class="pt-2">
-                        <label class="block text-xs font-medium text-gray-600 mb-1">换行格式</label>
-                        <select id="lineEndingSelect" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-gray-500 bg-white">
+                <div id="downloadSection" class="hidden">
+                    <button id="dlTextBtn" class="mac-btn">下载中文文档 (TXT)</button>
+                    <button id="dlDictBtn" class="mac-btn">下载术语词典 (CSV)</button>
+                    <div class="form-group" style="margin-bottom:0; margin-top:4px;">
+                        <span class="form-label">换行格式</span>
+                        <select id="lineEndingSelect" class="mac-select">
                             <option value="mac" selected>Mac / Linux</option>
                             <option value="windows">Windows</option>
                         </select>
@@ -104,14 +291,12 @@
                 </div>
             </div>
 
-            <div class="lg:col-span-7 bg-gray-900 text-green-400 p-6 rounded-xl shadow-md flex flex-col h-[720px]">
-                <h2 class="text-xl font-semibold mb-3 text-white border-b border-gray-700 pb-2 flex items-center justify-between shrink-0">
-                    <span>实时监控面板</span>
+            <div class="mac-main">
+                <div class="log-header">
+                    <span>终端监控</span>
                     <div id="spinner" class="spinner hidden"></div>
-                </h2>
-                <div id="logArea" class="flex-1 overflow-y-auto font-mono text-sm space-y-1.5 whitespace-pre-wrap break-words pr-2">
-等待任务初始化...
                 </div>
+                <div id="logArea">等待任务初始化...</div>
             </div>
         </div>
     </div>
@@ -123,6 +308,7 @@
         const apiKeyInput = document.getElementById('apiKey');
         const modelSelect = document.getElementById('modelSelect');
         const translationStyleSelect = document.getElementById('translationStyleSelect');
+        const targetLangSelect = document.getElementById('targetLangSelect');
         const termHandlingSelect = document.getElementById('termHandlingSelect');
         const lineEndingSelect = document.getElementById('lineEndingSelect');
         const startBtn = document.getElementById('startBtn');
@@ -172,6 +358,64 @@
 
         providerSelect.addEventListener('change', updateModels);
         updateModels();
+
+        const targetLangConfig = {
+            zh: {
+                name: '中文', promptTarget: '地道、流畅的中文',
+                glossaryHeader: '原文,中文译名', downloadLabel: '下载中文文档 (TXT)',
+                outputTag: '中文译文', xmlHint: '翻译好的中文段落',
+                countFn: text => (text.match(/[\u4e00-\u9fff]/g) || []).length,
+                countUnit: '中文总字数'
+            },
+            en: {
+                name: '英语', promptTarget: 'natural, fluent English',
+                glossaryHeader: 'Source Term,English Translation', downloadLabel: '下载英文文档 (TXT)',
+                outputTag: '英文译文', xmlHint: 'your translated English paragraphs',
+                countFn: text => (text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length,
+                countUnit: '英文总词数'
+            },
+            de: {
+                name: '德语', promptTarget: 'natürliches, flüssiges Deutsch',
+                glossaryHeader: 'Quellbegriff,Deutsche Übersetzung', downloadLabel: '下载德文文档 (TXT)',
+                outputTag: '德文译文', xmlHint: 'your translated German paragraphs',
+                countFn: text => (text.match(/[A-Za-zÄÖÜäöüß]+/g) || []).length,
+                countUnit: '德文总词数'
+            },
+            es: {
+                name: '西班牙语', promptTarget: 'español natural y fluido',
+                glossaryHeader: 'Término original,Traducción al español', downloadLabel: '下载西班牙文文档 (TXT)',
+                outputTag: '西文译文', xmlHint: 'your translated Spanish paragraphs',
+                countFn: text => (text.match(/[A-Za-záéíóúñüÁÉÍÓÚÑÜ]+/g) || []).length,
+                countUnit: '西文总词数'
+            },
+            ja: {
+                name: '日语', promptTarget: '自然で流暢な日本語',
+                glossaryHeader: '原文,日本語訳', downloadLabel: '下载日文文档 (TXT)',
+                outputTag: '日文译文', xmlHint: '翻訳した日本語の段落',
+                countFn: text => (text.match(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/g) || []).length,
+                countUnit: '日文总字数'
+            }
+        };
+
+        function detectPrimaryLanguage(text) {
+            const sample = text.slice(0, 3000);
+            const cjk = (sample.match(/[\u4e00-\u9fff]/g) || []).length;
+            const kana = (sample.match(/[\u3040-\u309f\u30a0-\u30ff]/g) || []).length;
+            const latin = (sample.match(/[A-Za-z]/g) || []).length;
+            const deChars = (sample.match(/[ÄÖÜäöüß]/g) || []).length;
+            const esChars = (sample.match(/[áéíóúñü¿¡]/g) || []).length;
+            if (kana > 50) return 'ja';
+            if (cjk > latin) return 'zh';
+            if (deChars > 10) return 'de';
+            if (esChars > 10) return 'es';
+            if (latin > cjk) return 'en';
+            return null;
+        }
+
+        targetLangSelect.addEventListener('change', () => {
+            const lang = targetLangConfig[targetLangSelect.value];
+            dlTextBtn.textContent = lang.downloadLabel;
+        });
 
         fileInput.addEventListener('change', () => {
             if (!fileInput.files.length) {
@@ -435,12 +679,12 @@
             const div = document.createElement('div');
             const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
 
-            if (type === "error") div.className = "text-red-400 font-bold";
-            else if (type === "warn") div.className = "text-orange-400";
-            else if (type === "success") div.className = "text-green-300 font-bold";
-            else if (type === "term") div.className = "text-yellow-300";
-            else if (type === "stats") div.className = "text-cyan-300 font-bold mt-2";
-            else div.className = "text-gray-300";
+            if (type === "error") div.className = "log-error";
+            else if (type === "warn") div.className = "log-warn";
+            else if (type === "success") div.className = "log-success";
+            else if (type === "term") div.className = "log-term";
+            else if (type === "stats") div.className = "log-stats";
+            else div.className = "log-info";
 
             div.textContent = `[${time}] ${msg}`;
             logArea.appendChild(div);
@@ -488,7 +732,8 @@
             return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
         }
 
-        async function callAI(chunk, apiKey, provider, model, translationStyle, termHandling, signal, contextMemory) {
+        async function callAI(chunk, apiKey, provider, model, translationStyle, termHandling, targetLang, signal, contextMemory) {
+            const lang = targetLangConfig[targetLang] || targetLangConfig.zh;
             let glossaryStr = Object.entries(glossary).map(([k, v]) => `${k}: ${v}`).join('\n');
             if (!glossaryStr) glossaryStr = "暂无";
 
@@ -496,27 +741,29 @@
             if (translationStyle === 'literal') {
                 styleRule = "采用直译模式：尽量保持原文句式与信息结构，优先忠实对应原文表达，不主动扩写、不润色。";
             } else if (translationStyle === 'literary_polish') {
-                styleRule = "采用文学润色模式：在不改变原意的前提下，优先使用更自然、更有文采、更具阅读性的中文表达，可适度调整语序以提升文笔。";
+                styleRule = `采用文学润色模式：在不改变原意的前提下，优先使用更自然、更有文采、更具阅读性的${lang.name}表达，可适度调整语序以提升文笔。`;
+            } else if (translationStyle === 'academic') {
+                styleRule = `采用学术论文模式：使用严谨、正式的${lang.name}学术书面语。要求：1) 术语精确，不可随意意译；2) 语气客观中立，避免口语化表达；3) 保留所有引用标记、脚注编号和参考文献格式；4) 使用正式逻辑连接词；5) 遵循学术写作惯例。`;
             } else {
-                styleRule = "采用忠实自然模式：在忠实原意的基础上，使用自然流畅的中文表达，兼顾准确性与可读性。";
+                styleRule = `采用忠实自然模式：在忠实原意的基础上，使用自然流畅的${lang.name}表达，兼顾准确性与可读性。`;
             }
 
             let termRule = "";
             let extractRule = "";
             let immersiveRule = "";
-            if (termHandling === 'keep_english') {
-                termRule = "遇到以上词汇，在生成的译文中必须严格保留原文，绝对不可翻译为中文。";
-                extractRule = "遇到词表中没有的新角色人名、新地名或新特殊物品名时，在生成的译文中请直接保留其英文原文。但为了建立词典，请你在提取时为它们构思一个准确的中文译名，并放入 <glossary> 标签中。";
-                immersiveRule = "直接输出英文名，不要在正文中补充任何中文解释或括号。";
+            if (termHandling === 'keep_source') {
+                termRule = `遇到以上词汇，在生成的译文中必须严格保留原文，绝对不可翻译为${lang.name}。`;
+                extractRule = `遇到词表中没有的新专有名词时，在译文中直接保留原文。但为了建立词典，请构思一个准确的${lang.name}译名，放入 <glossary> 标签中。`;
+                immersiveRule = `直接输出原文名，不要在正文中补充任何${lang.name}解释或括号。`;
             } else {
-                termRule = "遇到以上词汇，在生成的译文中必须严格使用对应的纯中文翻译，绝对不可更改。";
-                extractRule = "遇到词表中没有的新角色人名、新地名或新特殊物品名时，请给出一个准确的中文翻译，并在生成的译文中直接使用该中文名。同时将其提取在 <glossary> 标签中。";
-                immersiveRule = "绝对禁止在译文中出现“中文译名（英文原名）”的格式。所有专有名词只需要纯粹的中文译名。凡是带有原名括号的输出均为不合格。";
+                termRule = `遇到以上词汇，在生成的译文中必须严格使用对应的${lang.name}翻译，绝对不可更改。`;
+                extractRule = `遇到词表中没有的新专有名词时，请给出准确的${lang.name}翻译并在译文中直接使用。同时提取在 <glossary> 标签中。`;
+                immersiveRule = `绝对禁止在译文中出现“${lang.name}译名（原文）”的格式。所有专有名词只需纯粹的${lang.name}译名。凡是带有原名括号的输出均为不合格。`;
             }
 
             const contextMemoryText = contextMemory || "暂无历史上下文。";
 
-            const systemPrompt = `你是一位专业的长篇文档翻译家。请将以下文本翻译成地道、流畅的中文。
+            const systemPrompt = `你是一位专业的长篇文档翻译家。请将以下文本翻译成${lang.promptTarget}。
 【翻译风格】
 ${styleRule}
 
@@ -536,10 +783,10 @@ ${immersiveRule}
 
 请严格按照以下XML格式输出回复：
 <translation>
-[在这里写上你翻译好的中文段落]
+[${lang.xmlHint}]
 </translation>
 <glossary>
-[英文名1] = [中文译名1]
+[原文术语1] = [${lang.name}译名1]
 </glossary>
 
 如果没有发现新的专有名词，<glossary>标签内部留空即可。`;
@@ -674,12 +921,12 @@ ${immersiveRule}
             URL.revokeObjectURL(url);
         }
 
-        function glossaryToCSV(data, lineEnding = '\n') {
+        function glossaryToCSV(data, lineEnding = '\n', header = '原文,译文') {
             const escapeCSV = (value) => {
                 const text = String(value ?? "");
                 return `"${text.replaceAll('"', '""')}"`;
             };
-            const lines = ["英文名,中文译名"];
+            const lines = [header];
             for (const [eng, chi] of Object.entries(data)) {
                 lines.push(`${escapeCSV(eng)},${escapeCSV(chi)}`);
             }
@@ -688,6 +935,14 @@ ${immersiveRule}
 
         function normalizeLineEndings(text, mode) {
             return mode === 'windows' ? text.replace(/\r?\n/g, '\r\n') : text.replace(/\r\n/g, '\n');
+        }
+
+        function normalizeTextFormat(text) {
+            return text
+                .split(/\n\s*\n/)
+                .map(p => p.replace(/^\s+|\s+$/gm, ''))
+                .filter(p => p.length > 0)
+                .join('\n\n');
         }
 
         startBtn.addEventListener('click', async () => {
@@ -706,6 +961,8 @@ ${immersiveRule}
             const model = modelSelect.value;
             const translationStyle = translationStyleSelect.value;
             const termHandling = termHandlingSelect.value;
+            const targetLang = targetLangSelect.value;
+            const lang = targetLangConfig[targetLang] || targetLangConfig.zh;
 
             if (!file) {
                 alert("请选择需翻译的文档");
@@ -719,8 +976,7 @@ ${immersiveRule}
             isTranslating = true;
             abortController = new AbortController();
             startBtn.textContent = "终止翻译";
-            startBtn.classList.replace('bg-gray-800', 'bg-red-700');
-            startBtn.classList.replace('hover:bg-gray-700', 'hover:bg-red-800');
+            startBtn.classList.add('is-translating');
 
             spinner.classList.remove('hidden');
             downloadSection.classList.add('hidden');
@@ -743,9 +999,23 @@ ${immersiveRule}
                 protectedSegments = extracted.segments || [];
                 translationStartTime = Date.now();
                 sourceWordCount = countLatinWords(text);
+                const detectedLang = detectPrimaryLanguage(text);
+                if (detectedLang && detectedLang === targetLang) {
+                    if (!confirm(`检测到原文可能已是${lang.name}。继续翻译将变为润色/改写模式，是否继续？`)) {
+                        isTranslating = false;
+                        abortController = null;
+                        startBtn.textContent = "开始翻译";
+                        startBtn.classList.remove('is-translating');
+                        spinner.classList.add('hidden');
+                        logArea.innerHTML = "";
+                        log("用户取消操作。");
+                        return;
+                    }
+                    log(`用户确认以润色模式继续处理${lang.name}文档`, "warn");
+                }
                 log(`读取文件: ${file.name} | 格式: ${formatFileLabel(sourceFormat)} | 大小: ${(text.length/1024).toFixed(2)} KB`);
-                log(`请求通道: ${provider.toUpperCase()} | 模型: ${model}`);
-                log(`术语策略: ${termHandling === 'keep_english' ? '保留原文' : '译为中文'}`);
+                log(`请求通道: ${provider.toUpperCase()} | 模型: ${model} | 目标语言: ${lang.name}`);
+                log(`术语策略: ${termHandling === 'keep_source' ? '保留原文' : '译为' + lang.name}`);
 
                 const chunks = chunkText(text, 5000);
                 setLiveState('提取完成', `已分割为 ${chunks.length} 个区块`, { totalChunks: chunks.length, chunk: 0, retryCount: 0, error: null });
@@ -769,7 +1039,7 @@ ${immersiveRule}
                         attempt++;
                         try {
                             const contextMemory = buildContextMemory();
-                            const apiResult = await callAI(chunks[i], apiKey, provider, model, translationStyle, termHandling, abortController.signal, contextMemory);
+                            const apiResult = await callAI(chunks[i], apiKey, provider, model, translationStyle, termHandling, targetLang, abortController.signal, contextMemory);
                             const parsed = parseResponse(apiResult.content);
 
                             if (apiResult.usage) {
@@ -845,17 +1115,16 @@ ${immersiveRule}
                 isTranslating = false;
                 startBtn.disabled = false;
                 startBtn.textContent = "开始翻译";
-                startBtn.classList.replace('bg-red-700', 'bg-gray-800');
-                startBtn.classList.replace('hover:bg-red-800', 'hover:bg-gray-700');
+                startBtn.classList.remove('is-translating');
                 spinner.classList.add('hidden');
                 setLiveState('完成', '任务结束', { error: null });
 
                 if (translationStartTime > 0) {
                     const elapsed = Date.now() - translationStartTime;
-                    const chineseCharCount = countChineseChars(translatedText);
+                    const targetCharCount = lang.countFn(translatedText);
                     log(`文档统计:`, "stats");
-                    log(`英文总单词数: ${sourceWordCount.toLocaleString()}`, "stats");
-                    log(`中文总字数: ${chineseCharCount.toLocaleString()}`, "stats");
+                    log(`原文词数: ${sourceWordCount.toLocaleString()}`, "stats");
+                    log(`${lang.countUnit}: ${targetCharCount.toLocaleString()}`, "stats");
                     log(`翻译耗时: ${formatDuration(elapsed)}`, "stats");
                 }
 
@@ -875,17 +1144,18 @@ ${immersiveRule}
         function getStyleShortName(styleValue) {
             if (styleValue === 'literal') return '直译';
             if (styleValue === 'literary_polish') return '润色';
+            if (styleValue === 'academic') return '学术';
             return '自然';
         }
 
-        function buildOutputName(originalName, modelName, styleValue, ext) {
+        function buildOutputName(originalName, modelName, styleValue, langTag, ext) {
             const baseName = originalName ? getBaseFileName(originalName) : '文档';
             const safeModel = safeFileName(modelName || '模型');
             const styleName = getStyleShortName(styleValue);
-            return safeFileName(`${baseName} 中文译文 ${safeModel} ${styleName}.${ext}`);
+            return safeFileName(`${baseName} ${langTag} ${safeModel} ${styleName}.${ext}`);
         }
 
-        function buildGlossaryName(originalName, modelName, styleValue) {
+        function buildGlossaryName(originalName, modelName, styleValue, langTag) {
             const baseName = originalName ? getBaseFileName(originalName) : '文档';
             const safeModel = safeFileName(modelName || '模型');
             const styleName = getStyleShortName(styleValue);
@@ -893,19 +1163,22 @@ ${immersiveRule}
         }
 
         dlTextBtn.addEventListener('click', () => {
+            const lang = targetLangConfig[targetLangSelect.value] || targetLangConfig.zh;
             const lineEndingMode = lineEndingSelect.value;
-            const txtContent = normalizeLineEndings(translatedText, lineEndingMode);
+            const normalized = normalizeTextFormat(translatedText);
+            const txtContent = normalizeLineEndings(normalized, lineEndingMode);
             const originalName = fileInput.files.length ? fileInput.files[0].name : '文档';
-            const outName = buildOutputName(originalName, modelSelect.value, translationStyleSelect.value, 'txt');
+            const outName = buildOutputName(originalName, modelSelect.value, translationStyleSelect.value, lang.outputTag, 'txt');
             downloadFile(txtContent, outName, "text/plain;charset=utf-8");
         });
 
         dlDictBtn.addEventListener('click', () => {
+            const lang = targetLangConfig[targetLangSelect.value] || targetLangConfig.zh;
             const lineEndingMode = lineEndingSelect.value;
             const csvLineEnding = lineEndingMode === 'windows' ? '\r\n' : '\n';
             const originalName = fileInput.files.length ? fileInput.files[0].name : '文档';
-            const outName = buildGlossaryName(originalName, modelSelect.value, translationStyleSelect.value);
-            downloadFile(glossaryToCSV(glossary, csvLineEnding), outName, "text/csv;charset=utf-8");
+            const outName = buildGlossaryName(originalName, modelSelect.value, translationStyleSelect.value, lang.outputTag);
+            downloadFile(glossaryToCSV(glossary, csvLineEnding, lang.glossaryHeader), outName, "text/csv;charset=utf-8");
         });
     </script>
 </body>
