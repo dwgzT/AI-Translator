@@ -153,7 +153,7 @@
             gap: 10px;
         }
         .file-upload-wrapper .mac-btn { flex-shrink: 0; width: auto; }
-        #selectedFileName { font-size: 12px; color: var(--mac-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #selectedFileName, #glossaryFileName { font-size: 12px; color: var(--mac-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         
         #downloadSection {
             margin-top: auto;
@@ -224,6 +224,15 @@
                         <label for="fileInput" class="mac-btn">选取文件...</label>
                         <span id="selectedFileName">未选择文件</span>
                         <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,text/plain,text/markdown,text/html,application/xhtml+xml" class="hidden">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <span class="form-label">加载术语表（可选）</span>
+                    <div class="file-upload-wrapper">
+                        <label for="glossaryInput" class="mac-btn">选术语表...</label>
+                        <span id="glossaryFileName"></span>
+                        <input type="file" id="glossaryInput" accept=".csv,text/csv" class="hidden">
                     </div>
                 </div>
 
@@ -304,6 +313,8 @@
     <script>
         const fileInput = document.getElementById('fileInput');
         const selectedFileName = document.getElementById('selectedFileName');
+        const glossaryInput = document.getElementById('glossaryInput');
+        const glossaryFileName = document.getElementById('glossaryFileName');
         const providerSelect = document.getElementById('providerSelect');
         const apiKeyInput = document.getElementById('apiKey');
         const modelSelect = document.getElementById('modelSelect');
@@ -428,6 +439,34 @@
         });
 
         let glossary = {};
+        let rawGlossaryText = null;
+
+        glossaryInput.addEventListener('click', () => {
+            glossaryInput.value = ''; // 点击时先重置 input 状态
+            window.addEventListener('focus', () => {
+                setTimeout(() => {
+                    // 如果窗口重新获得焦点时没有选择文件（说明点了取消），则清空
+                    if (!glossaryInput.files.length) {
+                        glossaryFileName.textContent = '';
+                        rawGlossaryText = null;
+                    }
+                }, 100);
+            }, { once: true });
+        });
+
+        glossaryInput.addEventListener('change', async () => {
+            if (!glossaryInput.files.length) {
+                glossaryFileName.textContent = '';
+                rawGlossaryText = null;
+                return;
+            }
+            const file = glossaryInput.files[0];
+            glossaryFileName.textContent = file.name;
+            rawGlossaryText = await file.text();
+            if (rawGlossaryText && rawGlossaryText.charCodeAt(0) === 0xFEFF) {
+                rawGlossaryText = rawGlossaryText.slice(1);
+            }
+        });
 
         function parseCSVRow(line) {
             const fields = [];
@@ -461,37 +500,6 @@
             return fields;
         }
 
-        async function loadGlossaryCSV(targetLang) {
-            try {
-                const response = await fetch('Glossary.csv');
-                if (!response.ok) return { status: 'not_found' };
-
-                let text = await response.text();
-                if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-
-                const lines = text.split(/\r?\n/).filter(l => l.trim());
-                if (lines.length < 2) return { status: 'empty' };
-
-                const headers = parseCSVRow(lines[0]);
-                const langIndex = headers.indexOf(targetLang);
-                if (langIndex < 0) return { status: 'no_column' };
-
-                let count = 0;
-                for (let i = 1; i < lines.length; i++) {
-                    const fields = parseCSVRow(lines[i]);
-                    const source = fields[0];
-                    const target = langIndex < fields.length ? fields[langIndex] : '';
-                    if (source && target) {
-                        glossary[source] = target;
-                        count++;
-                    }
-                }
-
-                return { status: 'ok', count };
-            } catch (e) {
-                return { status: 'not_found' };
-            }
-        }
         let translatedText = "";
         let translationMemory = [];
         let protectedSegments = [];
@@ -1053,14 +1061,29 @@ ${immersiveRule}
             protectedSegments = [];
             sourceFormat = "txt";
 
-            const glossaryResult = await loadGlossaryCSV(targetLang);
-            if (glossaryResult.status === 'ok' && glossaryResult.count > 0) {
-                log(`术语表已加载 (${glossaryResult.count} 条${lang.name}预设)`, "term");
-            } else if (glossaryResult.status === 'no_column') {
-                log(`术语表无${lang.name}列，跳过预加载`);
-            } else if (glossaryResult.status === 'not_found') {
-                log(`未检测到术语表，术语将由 AI 自动提取`);
+            if (rawGlossaryText) {
+                const lines = rawGlossaryText.split(/\r?\n/).filter(l => l.trim());
+                if (lines.length >= 2) {
+                    const headers = parseCSVRow(lines[0]);
+                    const langIndex = headers.indexOf(targetLang);
+                    if (langIndex >= 0) {
+                        let count = 0;
+                        for (let i = 1; i < lines.length; i++) {
+                            const fields = parseCSVRow(lines[i]);
+                            const source = fields[0];
+                            const target = langIndex < fields.length ? fields[langIndex] : '';
+                            if (source && target) {
+                                glossary[source] = target;
+                                count++;
+                            }
+                        }
+                        log(`术语表已加载 (${count} 条${lang.name}预设)`, "term");
+                    } else {
+                        log(`术语表无${lang.name}列，跳过预加载`);
+                    }
+                }
             }
+
             let totalPromptTokens = 0;
             let totalCompletionTokens = 0;
             let failedChunksCount = 0;
