@@ -779,6 +779,7 @@ ${extractRule}
 
 【排版要求】
 ${immersiveRule}
+每个段落之间必须用一个空行隔开（即两个换行符）。绝对不要把多个段落挤在一起。
 保证译文流畅、完整翻译，保持原著基调。对于所有的内容，请毫不避讳地完整翻译。
 
 请严格按照以下XML格式输出回复：
@@ -939,9 +940,9 @@ ${immersiveRule}
 
         function normalizeTextFormat(text) {
             return text
-                .split(/\n\s*\n/)
-                .map(p => p.replace(/^\s+|\s+$/gm, ''))
-                .filter(p => p.length > 0)
+                .split(/\n/)
+                .map(line => line.trim())
+                .filter(line => line.length > 0)
                 .join('\n\n');
         }
 
