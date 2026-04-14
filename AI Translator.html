@@ -202,8 +202,8 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        .log-info { color: #a1a1a6; }
-        .log-success { color: #34c759; font-weight: 600; }
+        .log-info { color: #8e8e93; }
+        .log-success { color: #30d158; font-weight: 600; }
         .log-warn { color: #ff9f0a; }
         .log-error { color: #ff453a; font-weight: 600; }
         .log-term { color: #0a84ff; }
@@ -428,6 +428,70 @@
         });
 
         let glossary = {};
+
+        function parseCSVRow(line) {
+            const fields = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (inQuotes) {
+                    if (ch === '"') {
+                        if (i + 1 < line.length && line[i + 1] === '"') {
+                            current += '"';
+                            i++;
+                        } else {
+                            inQuotes = false;
+                        }
+                    } else {
+                        current += ch;
+                    }
+                } else {
+                    if (ch === '"') {
+                        inQuotes = true;
+                    } else if (ch === ',') {
+                        fields.push(current.trim());
+                        current = '';
+                    } else {
+                        current += ch;
+                    }
+                }
+            }
+            fields.push(current.trim());
+            return fields;
+        }
+
+        async function loadGlossaryCSV(targetLang) {
+            try {
+                const response = await fetch('Glossary.csv');
+                if (!response.ok) return { status: 'not_found' };
+
+                let text = await response.text();
+                if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+                const lines = text.split(/\r?\n/).filter(l => l.trim());
+                if (lines.length < 2) return { status: 'empty' };
+
+                const headers = parseCSVRow(lines[0]);
+                const langIndex = headers.indexOf(targetLang);
+                if (langIndex < 0) return { status: 'no_column' };
+
+                let count = 0;
+                for (let i = 1; i < lines.length; i++) {
+                    const fields = parseCSVRow(lines[i]);
+                    const source = fields[0];
+                    const target = langIndex < fields.length ? fields[langIndex] : '';
+                    if (source && target) {
+                        glossary[source] = target;
+                        count++;
+                    }
+                }
+
+                return { status: 'ok', count };
+            } catch (e) {
+                return { status: 'not_found' };
+            }
+        }
         let translatedText = "";
         let translationMemory = [];
         let protectedSegments = [];
@@ -988,6 +1052,15 @@ ${immersiveRule}
             translationMemory = [];
             protectedSegments = [];
             sourceFormat = "txt";
+
+            const glossaryResult = await loadGlossaryCSV(targetLang);
+            if (glossaryResult.status === 'ok' && glossaryResult.count > 0) {
+                log(`术语表已加载 (${glossaryResult.count} 条${lang.name}预设)`, "term");
+            } else if (glossaryResult.status === 'no_column') {
+                log(`术语表无${lang.name}列，跳过预加载`);
+            } else if (glossaryResult.status === 'not_found') {
+                log(`未检测到术语表，术语将由 AI 自动提取`);
+            }
             let totalPromptTokens = 0;
             let totalCompletionTokens = 0;
             let failedChunksCount = 0;
