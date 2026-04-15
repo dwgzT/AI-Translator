@@ -219,11 +219,11 @@
         <div class="mac-content">
             <div class="mac-sidebar">
                 <div class="form-group">
-                    <span class="form-label">上传文档 (TXT/MD/HTML)</span>
+                    <span class="form-label">上传文档 (TXT/MD/HTML/SRT)</span>
                     <div class="file-upload-wrapper">
                         <label for="fileInput" class="mac-btn">选取文件...</label>
                         <span id="selectedFileName">未选择文件</span>
-                        <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,text/plain,text/markdown,text/html,application/xhtml+xml" class="hidden">
+                        <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,.srt,text/plain,text/markdown,text/html,application/xhtml+xml" class="hidden">
                     </div>
                 </div>
 
@@ -425,7 +425,11 @@
 
         targetLangSelect.addEventListener('change', () => {
             const lang = targetLangConfig[targetLangSelect.value];
-            dlTextBtn.textContent = lang.downloadLabel;
+            if (sourceFormat === 'srt') {
+                dlTextBtn.textContent = `下载${lang.name}字幕 (SRT)`;
+            } else {
+                dlTextBtn.textContent = lang.downloadLabel;
+            }
         });
 
         fileInput.addEventListener('change', () => {
@@ -544,6 +548,7 @@
             const ext = getFileExtension(file?.name);
             const mime = (file?.type || "").toLowerCase();
 
+            if (ext === "srt") return "srt";
             if (ext === "txt" || mime === "text/plain") return "txt";
             if (["md", "markdown", "mkd", "mdown"].includes(ext) || mime.includes("markdown")) return "md";
             if (["html", "htm", "xhtml"].includes(ext) || mime.includes("html") || mime === "application/xhtml+xml") return "html";
@@ -551,6 +556,7 @@
         }
 
         function formatFileLabel(format) {
+            if (format === "srt") return "SRT";
             if (format === "md") return "Markdown";
             if (format === "html") return "HTML";
             if (format === "txt") return "TXT";
@@ -719,7 +725,126 @@
                 return htmlToText(raw);
             }
 
-            throw new Error("仅支持 TXT、Markdown 和 HTML 文件");
+            throw new Error("仅支持 TXT、Markdown、HTML 和 SRT 文件");
+        }
+
+        // ──────────────── SRT 字幕处理函数 ────────────────
+
+        function parseSRT(raw) {
+            const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            const blocks = normalized.split(/\n\n+/);
+            const entries = [];
+
+            for (const block of blocks) {
+                const lines = block.trim().split('\n');
+                if (lines.length < 2) continue;
+
+                const index = lines[0].trim();
+                const timecode = lines[1].trim();
+                const text = lines.length > 2 ? lines.slice(2).join('\n') : '';
+
+                if (index && timecode) {
+                    entries.push({ index, timecode, text });
+                }
+            }
+
+            return entries;
+        }
+
+        function validateSRT(entries) {
+            if (entries.length < 2) return false;
+
+            const timecodeRegex = /^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}/;
+            const checkCount = Math.min(entries.length, 10);
+            let validCount = 0;
+
+            for (let i = 0; i < checkCount; i++) {
+                const entry = entries[i];
+                if (/^\d+$/.test(entry.index) && timecodeRegex.test(entry.timecode)) {
+                    validCount++;
+                }
+            }
+
+            return validCount >= checkCount * 0.8;
+        }
+
+        function protectSRTTags(text, protector) {
+            // Protect SSA override tags: {\an8}, {\pos(320,50)}, etc.
+            let result = text.replace(/\{\\[^}]+\}/g, match => protector.protect(match));
+            // Protect HTML tags: <i>, </i>, <b>, </b>, <u>, </u>, <font ...>, </font>
+            result = result.replace(/<\/?(?:i|b|u|font)[^>]*>/gi, match => protector.protect(match));
+            return result;
+        }
+
+        function chunkSRTEntries(entries, batchSize, maxChars) {
+            batchSize = batchSize || 40;
+            maxChars = maxChars || 4000;
+            const batches = [];
+            let current = [];
+            let currentChars = 0;
+
+            for (const entry of entries) {
+                const textLen = (entry.protectedText || entry.text || '').length;
+                if (current.length > 0 && (current.length >= batchSize || currentChars + textLen > maxChars)) {
+                    batches.push(current);
+                    current = [];
+                    currentChars = 0;
+                }
+                current.push(entry);
+                currentChars += textLen;
+            }
+
+            if (current.length > 0) batches.push(current);
+            return batches;
+        }
+
+        function formatSRTBatch(batch) {
+            return batch.map((entry, i) =>
+                `<s id="${i + 1}">${entry.protectedText}</s>`
+            ).join('\n');
+        }
+
+        function parseSRTBatchResponse(rawContent) {
+            const translations = {};
+            const newTerms = [];
+
+            const transMatch = rawContent.match(/<translation>([\s\S]*?)<\/translation>/i);
+            const content = transMatch ? transMatch[1] : rawContent;
+
+            const regex = /<s\s+id=["']?(\d+)["']?>([\s\S]*?)<\/s>/gi;
+            let match;
+            while ((match = regex.exec(content)) !== null) {
+                const id = match[1];
+                translations[id] = match[2].trim();
+            }
+
+            const glossMatch = rawContent.match(/<glossary>([\s\S]*?)<\/glossary>/i);
+            if (glossMatch && glossMatch[1]) {
+                const lines = glossMatch[1].trim().split('\n');
+                for (let line of lines) {
+                    if (line.includes('=')) {
+                        let [eng, chi] = line.split('=');
+                        eng = eng.replace(/\[|\]/g, '').trim();
+                        chi = chi.replace(/\[|\]/g, '').trim();
+                        if (eng && chi) newTerms.push({ eng, chi });
+                    }
+                }
+            }
+
+            return { translations, newTerms };
+        }
+
+        function reassembleSRT(entries, translationsMap, protectorSegments) {
+            const blocks = [];
+
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i];
+                let text = translationsMap[i] !== undefined ? translationsMap[i] : entry.text;
+                text = restoreProtectedSegments(text, protectorSegments);
+                blocks.push(`${entry.index}\n${entry.timecode}\n${text}`);
+            }
+
+            return blocks.join('\n\n') + '\n';
         }
 
         const liveState = {
@@ -804,7 +929,7 @@
             return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
         }
 
-        async function callAI(chunk, apiKey, provider, model, translationStyle, termHandling, targetLang, signal, contextMemory) {
+        async function callAI(chunk, apiKey, provider, model, translationStyle, termHandling, targetLang, signal, contextMemory, mode) {
             const lang = targetLangConfig[targetLang] || targetLangConfig.zh;
             let glossaryStr = Object.entries(glossary).map(([k, v]) => `${k}: ${v}`).join('\n');
             if (!glossaryStr) glossaryStr = "暂无";
@@ -835,7 +960,43 @@
 
             const contextMemoryText = contextMemory || "暂无历史上下文。";
 
-            const systemPrompt = `你是一位专业的长篇文档翻译家。请将以下文本翻译成${lang.promptTarget}。
+            let systemPrompt;
+            if (mode === 'srt') {
+                systemPrompt = `你是一位专业的字幕翻译家。请将以下字幕条目翻译成${lang.promptTarget}。
+【翻译风格】
+${styleRule}
+
+【最近译文上下文】
+${contextMemoryText}
+
+【强制约束：当前已知专有名词表】
+${glossaryStr}
+${termRule}
+
+【词典提取任务】
+${extractRule}
+
+【字幕翻译要求】
+${immersiveRule}
+字幕翻译应简洁紧凑，适合屏幕阅读，避免不必要的扩写。
+保持每条字幕的独立性，但注意上下文连贯。
+不要合并或拆分字幕条目，必须与输入一一对应。
+保证译文流畅、完整翻译、保持原作基调。对于所有的内容，请毫不避讳地完整翻译。
+
+请严格按照以下XML格式输出回复：
+<translation>
+<s id="1">译文</s>
+<s id="2">译文</s>
+...（与输入的 id 一一对应）
+</translation>
+<glossary>
+[原文术语1] = [${lang.name}译名1]
+</glossary>
+
+如果没有发现新的专有名词，<glossary>标签内部留空即可。
+每条字幕必须用 <s id="N"> 标签包裹，id 与输入完全对应，不可遗漏或新增。`;
+            } else {
+                systemPrompt = `你是一位专业的长篇文档翻译家。请将以下文本翻译成${lang.promptTarget}。
 【翻译风格】
 ${styleRule}
 
@@ -863,6 +1024,7 @@ ${immersiveRule}
 </glossary>
 
 如果没有发现新的专有名词，<glossary>标签内部留空即可。`;
+            }
 
             let response;
             let data;
@@ -1090,102 +1252,237 @@ ${immersiveRule}
             let userAborted = false;
 
             try {
-                const extracted = await extractSourceText(file);
-                const text = extracted.text;
-                sourceFormat = extracted.format;
-                protectedSegments = extracted.segments || [];
                 translationStartTime = Date.now();
-                sourceWordCount = countLatinWords(text);
-                const detectedLang = detectPrimaryLanguage(text);
-                if (detectedLang && detectedLang === targetLang) {
-                    if (!confirm(`检测到原文可能已是${lang.name}。继续翻译将变为润色/改写模式，是否继续？`)) {
-                        isTranslating = false;
-                        abortController = null;
-                        startBtn.textContent = "开始翻译";
-                        startBtn.classList.remove('is-translating');
-                        spinner.classList.add('hidden');
-                        logArea.innerHTML = "";
-                        log("用户取消操作。");
-                        return;
+                const detectedFormat = detectFileFormat(file);
+                let isSRTMode = false;
+                let srtEntries = [];
+                let srtProtector = null;
+                let srtTranslationsMap = {};
+                let totalChunksCount = 0;
+
+                // SRT 检测与验证
+                if (detectedFormat === 'srt') {
+                    const raw = await file.text();
+                    srtEntries = parseSRT(raw);
+                    if (validateSRT(srtEntries)) {
+                        isSRTMode = true;
+                        sourceFormat = 'srt';
+                    } else {
+                        log('文件不符合 SRT 字幕格式，将按纯文本处理。', 'warn');
                     }
-                    log(`用户确认以润色模式继续处理${lang.name}文档`, "warn");
                 }
-                log(`读取文件: ${file.name} | 格式: ${formatFileLabel(sourceFormat)} | 大小: ${(text.length/1024).toFixed(2)} KB`);
-                log(`请求通道: ${provider.toUpperCase()} | 模型: ${model} | 目标语言: ${lang.name}`);
-                log(`术语策略: ${termHandling === 'keep_source' ? '保留原文' : '译为' + lang.name}`);
 
-                const chunks = chunkText(text, 5000);
-                setLiveState('提取完成', `已分割为 ${chunks.length} 个区块`, { totalChunks: chunks.length, chunk: 0, retryCount: 0, error: null });
-                log(`文档已分割为 ${chunks.length} 个区块，开始处理任务...`, "success");
-
-                for (let i = 0; i < chunks.length; i++) {
-                    if (abortController.signal.aborted) {
-                        log(`任务被手动终止。`, "warn");
-                        userAborted = true;
-                        break;
+                if (isSRTMode) {
+                    // ═══════ SRT 字幕翻译管线 ═══════
+                    srtProtector = createProtector();
+                    for (const entry of srtEntries) {
+                        entry.protectedText = protectSRTTags(entry.text, srtProtector);
                     }
 
-                    setLiveState('翻译中', `翻译区块 ${i + 1}/${chunks.length}`, { chunk: i + 1, totalChunks: chunks.length, retryCount: 0, error: null });
-                    log(`处理区块 [${i + 1}/${chunks.length}] ...`);
+                    const allSubText = srtEntries.map(e => e.text).join(' ');
+                    sourceWordCount = countLatinWords(allSubText);
+                    const detectedLang = detectPrimaryLanguage(allSubText);
+                    if (detectedLang && detectedLang === targetLang) {
+                        if (!confirm(`检测到原文可能已是${lang.name}。继续翻译将变为润色/改写模式，是否继续？`)) {
+                            isTranslating = false;
+                            abortController = null;
+                            startBtn.textContent = "开始翻译";
+                            startBtn.classList.remove('is-translating');
+                            spinner.classList.add('hidden');
+                            logArea.innerHTML = "";
+                            log("用户取消操作。");
+                            return;
+                        }
+                        log(`用户确认以润色模式继续处理${lang.name}字幕`, "warn");
+                    }
 
-                    let success = false;
-                    let attempt = 0;
-                    const maxAttempts = 5;
+                    log(`读取文件: ${file.name} | 格式: SRT | 字幕条数: ${srtEntries.length}`);
+                    log(`请求通道: ${provider.toUpperCase()} | 模型: ${model} | 目标语言: ${lang.name}`);
+                    log(`术语策略: ${termHandling === 'keep_source' ? '保留原文' : '译为' + lang.name}`);
 
-                    while (!success && attempt < maxAttempts) {
-                        attempt++;
-                        try {
-                            const contextMemory = buildContextMemory();
-                            const apiResult = await callAI(chunks[i], apiKey, provider, model, translationStyle, termHandling, targetLang, abortController.signal, contextMemory);
-                            const parsed = parseResponse(apiResult.content);
+                    const srtBatches = chunkSRTEntries(srtEntries, 40);
+                    totalChunksCount = srtBatches.length;
+                    setLiveState('提取完成', `已分割为 ${srtBatches.length} 个区块 (${srtEntries.length} 条字幕)`, { totalChunks: srtBatches.length, chunk: 0, retryCount: 0, error: null });
+                    log(`字幕已分割为 ${srtBatches.length} 个区块 (共 ${srtEntries.length} 条)，开始处理任务...`, "success");
 
-                            if (apiResult.usage) {
-                                totalPromptTokens += apiResult.usage.prompt_tokens || 0;
-                                totalCompletionTokens += apiResult.usage.completion_tokens || 0;
-                            }
+                    let batchOffset = 0;
+                    for (let i = 0; i < srtBatches.length; i++) {
+                        if (abortController.signal.aborted) {
+                            log(`任务被手动终止。`, "warn");
+                            userAborted = true;
+                            break;
+                        }
 
-                            const restoredTranslation = restoreProtectedSegments(parsed.translation, protectedSegments);
-                            setLiveState('翻译中', `区块 ${i + 1}/${chunks.length} 已完成`, { chunk: i + 1, totalChunks: chunks.length, retryCount: attempt - 1, error: null });
+                        const batch = srtBatches[i];
+                        setLiveState('翻译中', `翻译区块 ${i + 1}/${srtBatches.length}`, { chunk: i + 1, totalChunks: srtBatches.length, retryCount: 0, error: null });
+                        log(`处理区块 [${i + 1}/${srtBatches.length}] (字幕 ${batchOffset + 1}–${batchOffset + batch.length}) ...`);
 
-                            translatedText += restoredTranslation + "\n\n";
-                            updateTranslationMemory(restoredTranslation);
+                        let success = false;
+                        let attempt = 0;
+                        const maxAttempts = 5;
 
-                            for (const term of parsed.newTerms) {
-                                if (!glossary[term.eng]) {
-                                    glossary[term.eng] = term.chi;
-                                    log(`提取术语: ${term.eng} -> ${term.chi}`, "term");
+                        while (!success && attempt < maxAttempts) {
+                            attempt++;
+                            try {
+                                const contextMemory = buildContextMemory();
+                                const batchXML = formatSRTBatch(batch);
+                                const apiResult = await callAI(batchXML, apiKey, provider, model, translationStyle, termHandling, targetLang, abortController.signal, contextMemory, 'srt');
+                                const parsed = parseSRTBatchResponse(apiResult.content);
+
+                                if (apiResult.usage) {
+                                    totalPromptTokens += apiResult.usage.prompt_tokens || 0;
+                                    totalCompletionTokens += apiResult.usage.completion_tokens || 0;
+                                }
+
+                                for (const [localIdStr, text] of Object.entries(parsed.translations)) {
+                                    const localIdx = parseInt(localIdStr) - 1;
+                                    if (localIdx >= 0 && localIdx < batch.length) {
+                                        srtTranslationsMap[batchOffset + localIdx] = text;
+                                    }
+                                }
+
+                                const batchSummary = Object.values(parsed.translations).join(' ');
+                                updateTranslationMemory(batchSummary);
+
+                                for (const term of parsed.newTerms) {
+                                    if (!glossary[term.eng]) {
+                                        glossary[term.eng] = term.chi;
+                                        log(`提取术语: ${term.eng} -> ${term.chi}`, "term");
+                                    }
+                                }
+
+                                setLiveState('翻译中', `区块 ${i + 1}/${srtBatches.length} 已完成`, { chunk: i + 1, totalChunks: srtBatches.length, retryCount: attempt - 1, error: null });
+                                log(`区块 [${i + 1}] 完成 (${batch.length} 条字幕)` + (attempt > 1 ? ` (重试 ${attempt-1} 次)` : ''), "success");
+                                success = true;
+                            } catch (err) {
+                                if (err.name === 'AbortError') throw err;
+
+                                setLiveState('重试中', `区块 ${i + 1}/${srtBatches.length} 第 ${attempt}/${maxAttempts} 次`, { chunk: i + 1, totalChunks: srtBatches.length, retryCount: attempt, error: err.message });
+                                log(`区块 [${i + 1}] 异常 (尝试 ${attempt}/${maxAttempts}): ${err.message}`, "warn");
+                                if (attempt < maxAttempts) {
+                                    const waitTime = Math.pow(2, attempt);
+                                    log(`系统等待 ${waitTime} 秒后重试...`);
+                                    await sleep(waitTime * 1000);
                                 }
                             }
+                        }
 
-                            log(`区块 [${i + 1}] 完成` + (attempt > 1 ? ` (重试 ${attempt-1} 次)` : ''), "success");
-                            success = true;
-                        } catch (err) {
-                            if (err.name === 'AbortError') throw err;
+                        if (!success && !abortController.signal.aborted) {
+                            log(`区块 [${i + 1}] 经 ${maxAttempts} 次重试依旧失败，该批次字幕将保留原文。`, "error");
+                            setLiveState('错误', `区块 ${i + 1}/${srtBatches.length} 翻译失败`, { chunk: i + 1, totalChunks: srtBatches.length, error: '多次重试后仍失败' });
+                            failedChunksCount++;
+                        }
 
-                            setLiveState('重试中', `区块 ${i + 1}/${chunks.length} 第 ${attempt}/${maxAttempts} 次`, { chunk: i + 1, totalChunks: chunks.length, retryCount: attempt, error: err.message });
-                            log(`区块 [${i + 1}] 异常 (尝试 ${attempt}/${maxAttempts}): ${err.message}`, "warn");
-                            if (attempt < maxAttempts) {
-                                const waitTime = Math.pow(2, attempt);
-                                log(`系统等待 ${waitTime} 秒后重试...`);
-                                await sleep(waitTime * 1000);
-                            }
+                        batchOffset += batch.length;
+
+                        if (!abortController.signal.aborted) {
+                            await sleep(1000);
                         }
                     }
 
-                    if (!success && !abortController.signal.aborted) {
-                        log(`区块 [${i + 1}] 经 ${maxAttempts} 次重试依旧失败，已降级输出原文。`, "error");
-                        setLiveState('错误', `区块 ${i + 1}/${chunks.length} 翻译失败，已降级输出原文`, { chunk: i + 1, totalChunks: chunks.length, error: '多次重试后仍失败' });
-                        translatedText += `\n\n[系统提示：区块 ${i + 1} 翻译异常，输出原文]\n${restoreProtectedSegments(chunks[i], protectedSegments)}\n\n`;
-                        failedChunksCount++;
-                    }
+                    // 组装最终 SRT
+                    translatedText = reassembleSRT(srtEntries, srtTranslationsMap, srtProtector.segments);
 
-                    if (!abortController.signal.aborted) {
-                        await sleep(1000);
+                } else {
+                    // ═══════ 文档翻译管线 (TXT/MD/HTML) ═══════
+                    const extracted = await extractSourceText(file);
+                    const text = extracted.text;
+                    sourceFormat = extracted.format;
+                    protectedSegments = extracted.segments || [];
+                    sourceWordCount = countLatinWords(text);
+                    const detectedLang = detectPrimaryLanguage(text);
+                    if (detectedLang && detectedLang === targetLang) {
+                        if (!confirm(`检测到原文可能已是${lang.name}。继续翻译将变为润色/改写模式，是否继续？`)) {
+                            isTranslating = false;
+                            abortController = null;
+                            startBtn.textContent = "开始翻译";
+                            startBtn.classList.remove('is-translating');
+                            spinner.classList.add('hidden');
+                            logArea.innerHTML = "";
+                            log("用户取消操作。");
+                            return;
+                        }
+                        log(`用户确认以润色模式继续处理${lang.name}文档`, "warn");
+                    }
+                    log(`读取文件: ${file.name} | 格式: ${formatFileLabel(sourceFormat)} | 大小: ${(text.length/1024).toFixed(2)} KB`);
+                    log(`请求通道: ${provider.toUpperCase()} | 模型: ${model} | 目标语言: ${lang.name}`);
+                    log(`术语策略: ${termHandling === 'keep_source' ? '保留原文' : '译为' + lang.name}`);
+
+                    const chunks = chunkText(text, 5000);
+                    totalChunksCount = chunks.length;
+                    setLiveState('提取完成', `已分割为 ${chunks.length} 个区块`, { totalChunks: chunks.length, chunk: 0, retryCount: 0, error: null });
+                    log(`文档已分割为 ${chunks.length} 个区块，开始处理任务...`, "success");
+
+                    for (let i = 0; i < chunks.length; i++) {
+                        if (abortController.signal.aborted) {
+                            log(`任务被手动终止。`, "warn");
+                            userAborted = true;
+                            break;
+                        }
+
+                        setLiveState('翻译中', `翻译区块 ${i + 1}/${chunks.length}`, { chunk: i + 1, totalChunks: chunks.length, retryCount: 0, error: null });
+                        log(`处理区块 [${i + 1}/${chunks.length}] ...`);
+
+                        let success = false;
+                        let attempt = 0;
+                        const maxAttempts = 5;
+
+                        while (!success && attempt < maxAttempts) {
+                            attempt++;
+                            try {
+                                const contextMemory = buildContextMemory();
+                                const apiResult = await callAI(chunks[i], apiKey, provider, model, translationStyle, termHandling, targetLang, abortController.signal, contextMemory);
+                                const parsed = parseResponse(apiResult.content);
+
+                                if (apiResult.usage) {
+                                    totalPromptTokens += apiResult.usage.prompt_tokens || 0;
+                                    totalCompletionTokens += apiResult.usage.completion_tokens || 0;
+                                }
+
+                                const restoredTranslation = restoreProtectedSegments(parsed.translation, protectedSegments);
+                                setLiveState('翻译中', `区块 ${i + 1}/${chunks.length} 已完成`, { chunk: i + 1, totalChunks: chunks.length, retryCount: attempt - 1, error: null });
+
+                                translatedText += restoredTranslation + "\n\n";
+                                updateTranslationMemory(restoredTranslation);
+
+                                for (const term of parsed.newTerms) {
+                                    if (!glossary[term.eng]) {
+                                        glossary[term.eng] = term.chi;
+                                        log(`提取术语: ${term.eng} -> ${term.chi}`, "term");
+                                    }
+                                }
+
+                                log(`区块 [${i + 1}] 完成` + (attempt > 1 ? ` (重试 ${attempt-1} 次)` : ''), "success");
+                                success = true;
+                            } catch (err) {
+                                if (err.name === 'AbortError') throw err;
+
+                                setLiveState('重试中', `区块 ${i + 1}/${chunks.length} 第 ${attempt}/${maxAttempts} 次`, { chunk: i + 1, totalChunks: chunks.length, retryCount: attempt, error: err.message });
+                                log(`区块 [${i + 1}] 异常 (尝试 ${attempt}/${maxAttempts}): ${err.message}`, "warn");
+                                if (attempt < maxAttempts) {
+                                    const waitTime = Math.pow(2, attempt);
+                                    log(`系统等待 ${waitTime} 秒后重试...`);
+                                    await sleep(waitTime * 1000);
+                                }
+                            }
+                        }
+
+                        if (!success && !abortController.signal.aborted) {
+                            log(`区块 [${i + 1}] 经 ${maxAttempts} 次重试依旧失败，已降级输出原文。`, "error");
+                            setLiveState('错误', `区块 ${i + 1}/${chunks.length} 翻译失败，已降级输出原文`, { chunk: i + 1, totalChunks: chunks.length, error: '多次重试后仍失败' });
+                            translatedText += `\n\n[系统提示：区块 ${i + 1} 翻译异常，输出原文]\n${restoreProtectedSegments(chunks[i], protectedSegments)}\n\n`;
+                            failedChunksCount++;
+                        }
+
+                        if (!abortController.signal.aborted) {
+                            await sleep(1000);
+                        }
                     }
                 }
 
+                // ═══════ 共用完成逻辑 ═══════
                 if (!userAborted) {
-                    setLiveState('下载准备', '全部区块处理完毕', { chunk: chunks.length, totalChunks: chunks.length });
+                    setLiveState('下载准备', '全部区块处理完毕', { chunk: totalChunksCount, totalChunks: totalChunksCount });
                     log(`全部区块处理完毕`, "success");
                 }
                 if (failedChunksCount > 0) {
@@ -1225,6 +1522,11 @@ ${immersiveRule}
                     log(`翻译耗时: ${formatDuration(elapsed)}`, "stats");
                 }
 
+                if (sourceFormat === 'srt') {
+                    dlTextBtn.textContent = `下载${lang.name}字幕 (SRT)`;
+                } else {
+                    dlTextBtn.textContent = lang.downloadLabel;
+                }
                 downloadSection.classList.remove('hidden');
                 downloadSection.classList.add('flex');
             }
@@ -1262,11 +1564,18 @@ ${immersiveRule}
         dlTextBtn.addEventListener('click', () => {
             const lang = targetLangConfig[targetLangSelect.value] || targetLangConfig.zh;
             const lineEndingMode = lineEndingSelect.value;
-            const normalized = normalizeTextFormat(translatedText);
-            const txtContent = normalizeLineEndings(normalized, lineEndingMode);
-            const originalName = fileInput.files.length ? fileInput.files[0].name : '文档';
-            const outName = buildOutputName(originalName, modelSelect.value, translationStyleSelect.value, lang.outputTag, 'txt');
-            downloadFile(txtContent, outName, "text/plain;charset=utf-8");
+            const originalName = fileInput.files.length ? fileInput.files[0].name : (sourceFormat === 'srt' ? '字幕' : '文档');
+
+            if (sourceFormat === 'srt') {
+                const srtContent = normalizeLineEndings(translatedText, lineEndingMode);
+                const outName = buildOutputName(originalName, modelSelect.value, translationStyleSelect.value, lang.outputTag, 'srt');
+                downloadFile(srtContent, outName, "text/plain;charset=utf-8");
+            } else {
+                const normalized = normalizeTextFormat(translatedText);
+                const txtContent = normalizeLineEndings(normalized, lineEndingMode);
+                const outName = buildOutputName(originalName, modelSelect.value, translationStyleSelect.value, lang.outputTag, 'txt');
+                downloadFile(txtContent, outName, "text/plain;charset=utf-8");
+            }
         });
 
         dlDictBtn.addEventListener('click', () => {
