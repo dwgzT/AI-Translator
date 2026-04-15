@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>长篇文档翻译</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>AI 翻译</title>
     <style>
         :root {
             --mac-bg: #ececec;
@@ -214,7 +213,7 @@
 <body>
     <div class="mac-window">
         <div class="mac-toolbar">
-            <h1>长篇文档翻译</h1>
+            <h1>AI 翻译</h1>
         </div>
         <div class="mac-content">
             <div class="mac-sidebar">
@@ -373,35 +372,35 @@
         const targetLangConfig = {
             zh: {
                 name: '中文', promptTarget: '地道、流畅的中文',
-                glossaryHeader: '原文,中文译名', downloadLabel: '下载中文文档 (TXT)',
+                glossaryHeader: '原文,zh', downloadLabel: '下载中文文档 (TXT)',
                 outputTag: '中文译文', xmlHint: '翻译好的中文段落',
                 countFn: text => (text.match(/[\u4e00-\u9fff]/g) || []).length,
                 countUnit: '中文总字数'
             },
             en: {
                 name: '英语', promptTarget: 'natural, fluent English',
-                glossaryHeader: 'Source Term,English Translation', downloadLabel: '下载英文文档 (TXT)',
+                glossaryHeader: '原文,en', downloadLabel: '下载英文文档 (TXT)',
                 outputTag: '英文译文', xmlHint: 'your translated English paragraphs',
                 countFn: text => (text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length,
                 countUnit: '英文总词数'
             },
             de: {
                 name: '德语', promptTarget: 'natürliches, flüssiges Deutsch',
-                glossaryHeader: 'Quellbegriff,Deutsche Übersetzung', downloadLabel: '下载德文文档 (TXT)',
+                glossaryHeader: '原文,de', downloadLabel: '下载德文文档 (TXT)',
                 outputTag: '德文译文', xmlHint: 'your translated German paragraphs',
                 countFn: text => (text.match(/[A-Za-zÄÖÜäöüß]+/g) || []).length,
                 countUnit: '德文总词数'
             },
             es: {
                 name: '西班牙语', promptTarget: 'español natural y fluido',
-                glossaryHeader: 'Término original,Traducción al español', downloadLabel: '下载西班牙文文档 (TXT)',
+                glossaryHeader: '原文,es', downloadLabel: '下载西班牙文文档 (TXT)',
                 outputTag: '西文译文', xmlHint: 'your translated Spanish paragraphs',
                 countFn: text => (text.match(/[A-Za-záéíóúñüÁÉÍÓÚÑÜ]+/g) || []).length,
                 countUnit: '西文总词数'
             },
             ja: {
                 name: '日语', promptTarget: '自然で流暢な日本語',
-                glossaryHeader: '原文,日本語訳', downloadLabel: '下载日文文档 (TXT)',
+                glossaryHeader: '原文,ja', downloadLabel: '下载日文文档 (TXT)',
                 outputTag: '日文译文', xmlHint: '翻訳した日本語の段落',
                 countFn: text => (text.match(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/g) || []).length,
                 countUnit: '日文总字数'
@@ -806,7 +805,6 @@
 
         function parseSRTBatchResponse(rawContent) {
             const translations = {};
-            const newTerms = [];
 
             const transMatch = rawContent.match(/<translation>([\s\S]*?)<\/translation>/i);
             const content = transMatch ? transMatch[1] : rawContent;
@@ -814,24 +812,10 @@
             const regex = /<s\s+id=["']?(\d+)["']?>([\s\S]*?)<\/s>/gi;
             let match;
             while ((match = regex.exec(content)) !== null) {
-                const id = match[1];
-                translations[id] = match[2].trim();
+                translations[match[1]] = match[2].trim();
             }
 
-            const glossMatch = rawContent.match(/<glossary>([\s\S]*?)<\/glossary>/i);
-            if (glossMatch && glossMatch[1]) {
-                const lines = glossMatch[1].trim().split('\n');
-                for (let line of lines) {
-                    if (line.includes('=')) {
-                        let [eng, chi] = line.split('=');
-                        eng = eng.replace(/\[|\]/g, '').trim();
-                        chi = chi.replace(/\[|\]/g, '').trim();
-                        if (eng && chi) newTerms.push({ eng, chi });
-                    }
-                }
-            }
-
-            return { translations, newTerms };
+            return { translations, newTerms: parseGlossaryTerms(rawContent) };
         }
 
         function reassembleSRT(entries, translationsMap, protectorSegments) {
@@ -889,10 +873,6 @@
         }
 
 
-        function stripXmlWrapper(rawContent) {
-            return String(rawContent || '').replace(/<translation>[\s\S]*?<\/translation>/i, '').replace(/<glossary>[\s\S]*?<\/glossary>/i, '').trim();
-        }
-
         function chunkText(text, maxChars = 5000) {
             const paragraphs = text.split(/\n\s*\n/);
             const chunks = [];
@@ -914,11 +894,6 @@
 
         function countLatinWords(text) {
             const matches = text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g);
-            return matches ? matches.length : 0;
-        }
-
-        function countChineseChars(text) {
-            const matches = text.match(/[\u4e00-\u9fff]/g);
             return matches ? matches.length : 0;
         }
 
@@ -1116,32 +1091,34 @@ ${immersiveRule}
             return { content, usage };
         }
 
+        function parseGlossaryTerms(rawContent) {
+            const terms = [];
+            const glossMatch = rawContent.match(/<glossary>([\s\S]*?)<\/glossary>/i);
+            if (glossMatch && glossMatch[1]) {
+                const lines = glossMatch[1].trim().split('\n');
+                for (let line of lines) {
+                    if (line.includes('=')) {
+                        let [source, target] = line.split('=');
+                        source = source.replace(/\[|\]/g, '').trim();
+                        target = target.replace(/\[|\]/g, '').trim();
+                        if (source && target) terms.push({ source, target });
+                    }
+                }
+            }
+            return terms;
+        }
+
         function parseResponse(rawContent) {
             let translation = "";
-            let newTerms = [];
 
             const transMatch = rawContent.match(/<translation>([\s\S]*?)<\/translation>/i);
-            const glossMatch = rawContent.match(/<glossary>([\s\S]*?)<\/glossary>/i);
-
             if (transMatch && transMatch[1]) {
                 translation = transMatch[1].trim();
             } else {
                 translation = rawContent.trim();
             }
 
-            if (glossMatch && glossMatch[1]) {
-                const lines = glossMatch[1].trim().split('\n');
-                for (let line of lines) {
-                    if (line.includes('=')) {
-                        let [eng, chi] = line.split('=');
-                        eng = eng.replace(/\[|\]/g, '').trim();
-                        chi = chi.replace(/\[|\]/g, '').trim();
-                        if (eng && chi) newTerms.push({ eng, chi });
-                    }
-                }
-            }
-
-            return { translation, newTerms };
+            return { translation, newTerms: parseGlossaryTerms(rawContent) };
         }
 
         function downloadFile(content, filename, type) {
@@ -1178,6 +1155,16 @@ ${immersiveRule}
                 .map(line => line.trim())
                 .filter(line => line.length > 0)
                 .join('\n\n');
+        }
+
+        function cancelTranslation() {
+            isTranslating = false;
+            abortController = null;
+            startBtn.textContent = "开始翻译";
+            startBtn.classList.remove('is-translating');
+            spinner.classList.add('hidden');
+            logArea.innerHTML = "";
+            log("用户取消操作。");
         }
 
         startBtn.addEventListener('click', async () => {
@@ -1227,13 +1214,12 @@ ${immersiveRule}
                 const lines = rawGlossaryText.split(/\r?\n/).filter(l => l.trim());
                 if (lines.length >= 2) {
                     const headers = parseCSVRow(lines[0]);
-                    const langIndex = headers.indexOf(targetLang);
-                    if (langIndex >= 0) {
+                    if (headers.length >= 2 && headers[1].trim().toLowerCase() === targetLang) {
                         let count = 0;
                         for (let i = 1; i < lines.length; i++) {
                             const fields = parseCSVRow(lines[i]);
-                            const source = fields[0];
-                            const target = langIndex < fields.length ? fields[langIndex] : '';
+                            const source = (fields[0] || '').trim();
+                            const target = (fields[1] || '').trim();
                             if (source && target) {
                                 glossary[source] = target;
                                 count++;
@@ -1241,7 +1227,8 @@ ${immersiveRule}
                         }
                         log(`术语表已加载 (${count} 条${lang.name}预设)`, "term");
                     } else {
-                        log(`术语表无${lang.name}列，跳过预加载`);
+                        const foundCol = headers.length >= 2 ? headers[1].trim() : '未知';
+                        log(`术语表语言列为 "${foundCol}"，与目标语言 "${targetLang}" 不一致，跳过预加载`, "warn");
                     }
                 }
             }
@@ -1284,13 +1271,7 @@ ${immersiveRule}
                     const detectedLang = detectPrimaryLanguage(allSubText);
                     if (detectedLang && detectedLang === targetLang) {
                         if (!confirm(`检测到原文可能已是${lang.name}。继续翻译将变为润色/改写模式，是否继续？`)) {
-                            isTranslating = false;
-                            abortController = null;
-                            startBtn.textContent = "开始翻译";
-                            startBtn.classList.remove('is-translating');
-                            spinner.classList.add('hidden');
-                            logArea.innerHTML = "";
-                            log("用户取消操作。");
+                            cancelTranslation();
                             return;
                         }
                         log(`用户确认以润色模式继续处理${lang.name}字幕`, "warn");
@@ -1345,9 +1326,9 @@ ${immersiveRule}
                                 updateTranslationMemory(batchSummary);
 
                                 for (const term of parsed.newTerms) {
-                                    if (!glossary[term.eng]) {
-                                        glossary[term.eng] = term.chi;
-                                        log(`提取术语: ${term.eng} -> ${term.chi}`, "term");
+                                    if (!glossary[term.source]) {
+                                        glossary[term.source] = term.target;
+                                        log(`提取术语: ${term.source} -> ${term.target}`, "term");
                                     }
                                 }
 
@@ -1393,13 +1374,7 @@ ${immersiveRule}
                     const detectedLang = detectPrimaryLanguage(text);
                     if (detectedLang && detectedLang === targetLang) {
                         if (!confirm(`检测到原文可能已是${lang.name}。继续翻译将变为润色/改写模式，是否继续？`)) {
-                            isTranslating = false;
-                            abortController = null;
-                            startBtn.textContent = "开始翻译";
-                            startBtn.classList.remove('is-translating');
-                            spinner.classList.add('hidden');
-                            logArea.innerHTML = "";
-                            log("用户取消操作。");
+                            cancelTranslation();
                             return;
                         }
                         log(`用户确认以润色模式继续处理${lang.name}文档`, "warn");
@@ -1446,9 +1421,9 @@ ${immersiveRule}
                                 updateTranslationMemory(restoredTranslation);
 
                                 for (const term of parsed.newTerms) {
-                                    if (!glossary[term.eng]) {
-                                        glossary[term.eng] = term.chi;
-                                        log(`提取术语: ${term.eng} -> ${term.chi}`, "term");
+                                    if (!glossary[term.source]) {
+                                        glossary[term.source] = term.target;
+                                        log(`提取术语: ${term.source} -> ${term.target}`, "term");
                                     }
                                 }
 
@@ -1528,7 +1503,6 @@ ${immersiveRule}
                     dlTextBtn.textContent = lang.downloadLabel;
                 }
                 downloadSection.classList.remove('hidden');
-                downloadSection.classList.add('flex');
             }
         });
 
