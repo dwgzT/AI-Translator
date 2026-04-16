@@ -366,8 +366,47 @@
             }
         }
 
-        providerSelect.addEventListener('change', updateModels);
-        updateModels();
+        // ─── localStorage persistence (provider + per-provider keys) ────────
+        const STORAGE_KEY = 'ai_translator_prefs';
+
+        function savePrefs() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+                const keys = saved.keys || {};
+                keys[providerSelect.value] = apiKeyInput.value;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    provider: providerSelect.value,
+                    keys
+                }));
+            } catch (_) {}
+        }
+
+        function loadPrefs() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+                if (saved.provider && providerSelect.querySelector(`option[value="${saved.provider}"]`)) {
+                    providerSelect.value = saved.provider;
+                }
+                updateModels();
+                const keys = saved.keys || {};
+                apiKeyInput.value = keys[providerSelect.value] || '';
+            } catch (_) {
+                updateModels();
+            }
+        }
+
+        providerSelect.addEventListener('change', () => {
+            updateModels();
+            // Auto-fill the saved key for the newly selected provider
+            try {
+                const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+                apiKeyInput.value = (saved.keys || {})[providerSelect.value] || '';
+            } catch (_) {
+                apiKeyInput.value = '';
+            }
+        });
+
+        loadPrefs();
 
         const targetLangConfig = {
             zh: {
@@ -1194,6 +1233,8 @@ ${immersiveRule}
                 alert("请提供对应的 API Key");
                 return;
             }
+
+            savePrefs();
 
             isTranslating = true;
             abortController = new AbortController();
