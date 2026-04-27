@@ -329,13 +329,23 @@
         const dlDictBtn = document.getElementById('dlDictBtn');
 
         const providerModels = {
-            mistral: [{ value: "mistral-small-latest", text: "mistral-small-latest" }],
-            xai: [{ value: "grok-4-1-fast-non-reasoning", text: "grok-4-1-fast-non-reasoning" }],
+            mistral: [
+                { value: "mistral-small-latest", text: "mistral-small-latest" },
+                { value: "mistral-large-latest", text: "mistral-large-latest" }
+            ],
+            xai: [
+                { value: "grok-4-1-fast-non-reasoning", text: "grok-4-1-fast-non-reasoning" },
+                { value: "grok-4.20-non-reasoning", text: "grok-4.20-non-reasoning" }
+            ],
             openai: [
                 { value: "gpt-5.4-nano", text: "gpt-5.4-nano" },
-                { value: "gpt-5-nano", text: "gpt-5-nano" }
+                { value: "gpt-5.4-mini", text: "gpt-5.4-mini" },
+                { value: "gpt-4o-mini", text: "gpt-4o-mini" }
             ],
-            google: [{ value: "models/gemini-flash-lite-latest", text: "models/gemini-flash-lite-latest" }],
+            google: [
+                { value: "gemini-flash-latest", text: "gemini-flash-latest" },
+                { value: "gemini-flash-lite-latest", text: "gemini-flash-lite-latest" }
+            ],
             anthropic: [{ value: "claude-haiku-4-5", text: "claude-haiku-4-5" }],
             qwen: [
                 { value: "qwen-long-latest", text: "qwen-long-latest" }
