@@ -512,8 +512,7 @@
                 return;
             }
             const file = fileInput.files[0];
-            const format = formatFileLabel(detectFileFormat(file));
-            selectedFileName.textContent = `${file.name} · ${format}`;
+            selectedFileName.textContent = file.name;
         });
 
         let glossary = {};
