@@ -35,7 +35,7 @@
         .mac-window {
             width: 100%;
             max-width: 1000px;
-            height: 720px;
+            height: 820px;
             background: var(--mac-window-bg);
             border-radius: 10px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.15), 0 0 0 0.5px var(--mac-border);
@@ -229,7 +229,7 @@
                 <div class="form-group">
                     <span class="form-label">加载术语表（可选）</span>
                     <div class="file-upload-wrapper">
-                        <label for="glossaryInput" class="mac-btn">选术语表...</label>
+                        <button type="button" id="glossaryBtn" class="mac-btn">选术语表...</button>
                         <span id="glossaryFileName"></span>
                         <input type="file" id="glossaryInput" accept=".csv,text/csv" class="hidden">
                     </div>
@@ -245,8 +245,13 @@
                             <option value="google">Google</option>
                             <option value="anthropic">Anthropic</option>
                             <option value="qwen">阿里云</option>
+                            <option value="bedrock">AWS Bedrock</option>
                         </select>
                         <input type="password" id="apiKey" placeholder="API Key" class="mac-input">
+                    </div>
+                    <div id="awsExtraFields" class="hidden" style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+                        <input type="password" id="awsSecretKey" placeholder="AWS Secret Access Key" class="mac-input">
+                        <input type="text" id="awsRegion" placeholder="区域 (如 us-east-1)" class="mac-input" value="us-east-1">
                     </div>
                 </div>
 
@@ -288,7 +293,8 @@
 
                 <div id="downloadSection" class="hidden">
                     <button id="dlTextBtn" class="mac-btn">下载中文文档 (TXT)</button>
-                    <button id="dlDictBtn" class="mac-btn">下载术语词典 (CSV)</button>
+                    <button id="dlDictBtn" class="mac-btn">下载新增术语 (CSV)</button>
+                    <button id="dlMergedDictBtn" class="mac-btn hidden">下载术语合集 (CSV)</button>
                     <div class="form-group" style="margin-bottom:0; margin-top:4px;">
                         <span class="form-label">换行格式</span>
                         <select id="lineEndingSelect" class="mac-select">
@@ -327,6 +333,7 @@
         const downloadSection = document.getElementById('downloadSection');
         const dlTextBtn = document.getElementById('dlTextBtn');
         const dlDictBtn = document.getElementById('dlDictBtn');
+        const dlMergedDictBtn = document.getElementById('dlMergedDictBtn');
 
         const providerModels = {
             mistral: [
@@ -334,7 +341,6 @@
                 { value: "mistral-large-latest", text: "mistral-large-latest" }
             ],
             xai: [
-                { value: "grok-4-1-fast-non-reasoning", text: "grok-4-1-fast-non-reasoning" },
                 { value: "grok-4.20-non-reasoning", text: "grok-4.20-non-reasoning" }
             ],
             openai: [
@@ -349,6 +355,9 @@
             anthropic: [{ value: "claude-haiku-4-5", text: "claude-haiku-4-5" }],
             qwen: [
                 { value: "qwen-long-latest", text: "qwen-long-latest" }
+            ],
+            bedrock: [
+                { value: "mistral.mistral-large-3-675b-instruct", text: "Mistral Large 3 (675B)" }
             ]
         };
 
@@ -374,6 +383,13 @@
             if (models.length) {
                 modelSelect.value = models[0].value;
             }
+
+            const isBedrock = provider === 'bedrock';
+            const awsFields = document.getElementById('awsExtraFields');
+            awsFields.classList.toggle('hidden', !isBedrock);
+            if (isBedrock) awsFields.style.display = 'flex';
+            else awsFields.style.display = '';
+            document.getElementById('apiKey').placeholder = isBedrock ? 'AWS Access Key ID' : 'API Key';
         }
 
         // ─── localStorage persistence (provider + per-provider keys) ────────
@@ -384,9 +400,15 @@
                 const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
                 const keys = saved.keys || {};
                 keys[providerSelect.value] = apiKeyInput.value;
+                const bedrock = saved.bedrock || {};
+                if (providerSelect.value === 'bedrock') {
+                    bedrock.secretKey = document.getElementById('awsSecretKey').value;
+                    bedrock.region = document.getElementById('awsRegion').value;
+                }
                 localStorage.setItem(STORAGE_KEY, JSON.stringify({
                     provider: providerSelect.value,
-                    keys
+                    keys,
+                    bedrock
                 }));
             } catch (_) {}
         }
@@ -400,6 +422,10 @@
                 updateModels();
                 const keys = saved.keys || {};
                 apiKeyInput.value = keys[providerSelect.value] || '';
+                if (saved.bedrock) {
+                    document.getElementById('awsSecretKey').value = saved.bedrock.secretKey || '';
+                    document.getElementById('awsRegion').value = saved.bedrock.region || 'us-east-1';
+                }
             } catch (_) {
                 updateModels();
             }
@@ -492,32 +518,45 @@
 
         let glossary = {};
         let rawGlossaryText = null;
+        let mergedGlossaryCSV = null;
+        let glossaryOriginalName = '';
 
-        glossaryInput.addEventListener('click', () => {
-            glossaryInput.value = ''; // 点击时先重置 input 状态
-            window.addEventListener('focus', () => {
-                setTimeout(() => {
-                    // 如果窗口重新获得焦点时没有选择文件（说明点了取消），则清空
-                    if (!glossaryInput.files.length) {
-                        glossaryFileName.textContent = '';
-                        rawGlossaryText = null;
+        const glossaryBtn = document.getElementById('glossaryBtn');
+
+        function loadGlossaryFile(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    glossaryOriginalName = file.name;
+                    glossaryFileName.textContent = file.name;
+                    rawGlossaryText = reader.result;
+                    if (rawGlossaryText && rawGlossaryText.charCodeAt(0) === 0xFEFF) {
+                        rawGlossaryText = rawGlossaryText.slice(1);
                     }
-                }, 100);
-            }, { once: true });
+                    resolve();
+                };
+                reader.readAsText(file);
+            });
+        }
+
+        function clearGlossary() {
+            glossaryFileName.textContent = '';
+            rawGlossaryText = null;
+            glossaryOriginalName = '';
+            mergedGlossaryCSV = null;
+        }
+
+        glossaryBtn.addEventListener('click', () => {
+            glossaryInput.value = '';
+            glossaryInput.click();
         });
 
         glossaryInput.addEventListener('change', async () => {
             if (!glossaryInput.files.length) {
-                glossaryFileName.textContent = '';
-                rawGlossaryText = null;
+                clearGlossary();
                 return;
             }
-            const file = glossaryInput.files[0];
-            glossaryFileName.textContent = file.name;
-            rawGlossaryText = await file.text();
-            if (rawGlossaryText && rawGlossaryText.charCodeAt(0) === 0xFEFF) {
-                rawGlossaryText = rawGlossaryText.slice(1);
-            }
+            await loadGlossaryFile(glossaryInput.files[0]);
         });
 
         function parseCSVRow(line) {
@@ -557,6 +596,8 @@
         let protectedSegments = [];
         let sourceFormat = "txt";
         let isTranslating = false;
+        let preloadedGlossaryKeys = new Set();
+        let newGlossaryTerms = {};
         let abortController = null;
         let translationStartTime = 0;
         let sourceWordCount = 0;
@@ -953,6 +994,43 @@
             return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
         }
 
+        async function hmacSHA256(key, msg) {
+            const enc = new TextEncoder();
+            const keyData = key instanceof Uint8Array ? key : enc.encode(key);
+            const k = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+            return new Uint8Array(await crypto.subtle.sign('HMAC', k, enc.encode(msg)));
+        }
+
+        async function sha256Hex(str) {
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function buildBedrockHeaders(url, bodyStr, accessKeyId, secretKey, region) {
+            const service = 'bedrock';
+            const now = new Date();
+            const p = n => String(n).padStart(2, '0');
+            const amzDate = `${now.getUTCFullYear()}${p(now.getUTCMonth()+1)}${p(now.getUTCDate())}T${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}Z`;
+            const dateStamp = amzDate.slice(0, 8);
+            const urlObj = new URL(url);
+            const bodyHash = await sha256Hex(bodyStr);
+            const canonicalHeaders = `content-type:application/json\nhost:${urlObj.host}\nx-amz-date:${amzDate}\n`;
+            const signedHeaders = 'content-type;host;x-amz-date';
+            const canonicalReq = ['POST', urlObj.pathname, '', canonicalHeaders, signedHeaders, bodyHash].join('\n');
+            const credScope = `${dateStamp}/${region}/${service}/aws4_request`;
+            const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credScope, await sha256Hex(canonicalReq)].join('\n');
+            let sk = await hmacSHA256(`AWS4${secretKey}`, dateStamp);
+            sk = await hmacSHA256(sk, region);
+            sk = await hmacSHA256(sk, service);
+            sk = await hmacSHA256(sk, 'aws4_request');
+            const sig = Array.from(await hmacSHA256(sk, stringToSign)).map(b => b.toString(16).padStart(2, '0')).join('');
+            return {
+                'Content-Type': 'application/json',
+                'x-amz-date': amzDate,
+                'Authorization': `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${sig}`
+            };
+        }
+
         async function callAI(chunk, apiKey, provider, model, translationStyle, termHandling, targetLang, signal, contextMemory, mode) {
             const lang = targetLangConfig[targetLang] || targetLangConfig.zh;
             let glossaryStr = Object.entries(glossary).map(([k, v]) => `${k}: ${v}`).join('\n');
@@ -1135,6 +1213,26 @@ ${immersiveRule}
                 data = await response.json();
                 content = data.choices?.[0]?.message?.content || "";
                 usage = { prompt_tokens: data.usage?.prompt_tokens, completion_tokens: data.usage?.completion_tokens };
+            } else if (provider === 'bedrock') {
+                const awsSecretKey = document.getElementById('awsSecretKey').value.trim();
+                const awsRegion = document.getElementById('awsRegion').value.trim() || 'us-east-1';
+                const endpoint = `https://bedrock-runtime.${awsRegion}.amazonaws.com/model/${encodeURIComponent(model)}/converse`;
+                const bedrockBody = JSON.stringify({
+                    system: [{ text: systemPrompt }],
+                    messages: [{ role: 'user', content: [{ text: chunk }] }],
+                    inferenceConfig: { temperature: 0.3, maxTokens: 8192 }
+                });
+                const bedrockHeaders = await buildBedrockHeaders(endpoint, bedrockBody, apiKey, awsSecretKey, awsRegion);
+                response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: bedrockHeaders,
+                    body: bedrockBody,
+                    signal
+                });
+                if (!response.ok) throw new Error(`API Error ${response.status}: ${await response.text()}`);
+                data = await response.json();
+                content = data.output?.message?.content?.[0]?.text || '';
+                usage = { prompt_tokens: data.usage?.inputTokens, completion_tokens: data.usage?.outputTokens };
             }
 
             return { content, usage };
@@ -1256,6 +1354,8 @@ ${immersiveRule}
             logArea.innerHTML = "";
 
             glossary = {};
+            newGlossaryTerms = {};
+            preloadedGlossaryKeys = new Set();
             translatedText = "";
             translationMemory = [];
             protectedSegments = [];
@@ -1273,6 +1373,7 @@ ${immersiveRule}
                             const target = (fields[1] || '').trim();
                             if (source && target) {
                                 glossary[source] = target;
+                                preloadedGlossaryKeys.add(source);
                                 count++;
                             }
                         }
@@ -1379,6 +1480,7 @@ ${immersiveRule}
                                 for (const term of parsed.newTerms) {
                                     if (!glossary[term.source]) {
                                         glossary[term.source] = term.target;
+                                        newGlossaryTerms[term.source] = term.target;
                                         log(`提取术语: ${term.source} -> ${term.target}`, "term");
                                     }
                                 }
@@ -1474,6 +1576,7 @@ ${immersiveRule}
                                 for (const term of parsed.newTerms) {
                                     if (!glossary[term.source]) {
                                         glossary[term.source] = term.target;
+                                        newGlossaryTerms[term.source] = term.target;
                                         log(`提取术语: ${term.source} -> ${term.target}`, "term");
                                     }
                                 }
@@ -1548,11 +1651,55 @@ ${immersiveRule}
                     log(`翻译耗时: ${formatDuration(elapsed)}`, "stats");
                 }
 
+                // ─── 合并术语表（供下载术语合集使用） ───
+                mergedGlossaryCSV = null;
+                if (rawGlossaryText && Object.keys(newGlossaryTerms).length > 0) {
+                    try {
+                        const existingLines = rawGlossaryText.split(/\r?\n/).filter(l => l.trim());
+                        const headerLine = existingLines.length > 0 ? existingLines[0] : `原文,${targetLang}`;
+                        const existingMap = new Map();
+                        for (let ei = 1; ei < existingLines.length; ei++) {
+                            const fields = parseCSVRow(existingLines[ei]);
+                            const src = (fields[0] || '').trim();
+                            const tgt = (fields[1] || '').trim();
+                            if (src) existingMap.set(src, tgt);
+                        }
+
+                        let addedCount = 0;
+                        for (const [src, tgt] of Object.entries(newGlossaryTerms)) {
+                            if (!existingMap.has(src)) {
+                                existingMap.set(src, tgt);
+                                addedCount++;
+                            }
+                        }
+
+                        if (addedCount > 0) {
+                            const sortedEntries = Array.from(existingMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+                            const escapeCSV = (value) => {
+                                const text = String(value ?? "");
+                                return `"${text.replaceAll('"', '""')}"`;
+                            };
+                            const csvLines = [headerLine];
+                            for (const [src, tgt] of sortedEntries) {
+                                csvLines.push(`${escapeCSV(src)},${escapeCSV(tgt)}`);
+                            }
+                            mergedGlossaryCSV = csvLines.join('\n');
+                            rawGlossaryText = mergedGlossaryCSV;
+                            log(`术语合集: ${addedCount} 条新增术语已合并 (共 ${sortedEntries.length} 条，已按原文排序)`, "term");
+                        } else {
+                            log(`术语合集: 无新增术语，术语表不变 (共 ${existingMap.size} 条)`, "term");
+                        }
+                    } catch (e) {
+                        log(`术语合集处理失败: ${e.message}`, "warn");
+                    }
+                }
+
                 if (sourceFormat === 'srt') {
                     dlTextBtn.textContent = `下载${lang.name}字幕 (SRT)`;
                 } else {
                     dlTextBtn.textContent = lang.downloadLabel;
                 }
+                dlMergedDictBtn.classList.toggle('hidden', !mergedGlossaryCSV);
                 downloadSection.classList.remove('hidden');
             }
         });
@@ -1609,7 +1756,15 @@ ${immersiveRule}
             const csvLineEnding = lineEndingMode === 'windows' ? '\r\n' : '\n';
             const originalName = fileInput.files.length ? fileInput.files[0].name : '文档';
             const outName = buildGlossaryName(originalName, modelSelect.value, translationStyleSelect.value, lang.outputTag);
-            downloadFile(glossaryToCSV(glossary, csvLineEnding, lang.glossaryHeader), outName, "text/csv;charset=utf-8");
+            downloadFile(glossaryToCSV(newGlossaryTerms, csvLineEnding, lang.glossaryHeader), outName, "text/csv;charset=utf-8");
+        });
+
+        dlMergedDictBtn.addEventListener('click', () => {
+            if (!mergedGlossaryCSV) return;
+            const lineEndingMode = lineEndingSelect.value;
+            const content = '\ufeff' + normalizeLineEndings(mergedGlossaryCSV, lineEndingMode);
+            const outName = glossaryOriginalName || '术语合集.csv';
+            downloadFile(content, outName, 'text/csv;charset=utf-8');
         });
     </script>
 </body>
